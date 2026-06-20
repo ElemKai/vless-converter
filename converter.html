@@ -3,8 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>VLESS Converter — Koala Clash & Happ JSON</title>
-    <meta name="description" content="Конвертер Koala Clash и Happ JSON конфигов в VLESS-ссылки.">
+    <title>VLESS Converter — Подписки, Koala Clash & Happ JSON</title>
+    <meta name="description" content="Конвертер подписок, Koala Clash и Happ JSON конфигов в VLESS-ссылки.">
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -24,28 +24,133 @@
     <div class="terminal-card">
         <div class="terminal-topbar">
             <div class="dot red"></div><div class="dot yellow"></div><div class="dot green"></div>
-            <span class="terminal-title">Koala Clash / Happ JSON → VLESS</span>
+            <span class="terminal-title">Подписки / Koala Clash / Happ JSON → VLESS</span>
         </div>
         <div class="card-body">
-            <p class="section-label"># Выбор формата</p>
+            <p class="section-label"># Выбор источника</p>
             <div class="tabs">
-                <button class="tab-btn active" data-tab="koala">Koala Clash</button>
+                <button class="tab-btn active" data-tab="subscription">📡 Подписка</button>
+                <button class="tab-btn" data-tab="koala">Koala Clash</button>
                 <button class="tab-btn" data-tab="happ">Happ JSON</button>
             </div>
 
-            <div id="koala" class="tab-content active">
+            <!-- ==================== ПОДПИСКА ==================== -->
+            <div id="subscription" class="tab-content active">
+                
+                <!-- Способ 1: URL -->
+                <div class="sub-method">
+                    <div class="sub-method-header">
+                        <span class="sub-method-badge">1</span>
+                        <span class="sub-method-title">Загрузка по URL</span>
+                    </div>
+                    
+                    <div class="subscription-input-group">
+                        <input type="text" id="subscription-url" class="subscription-url-input" 
+                               placeholder="https://sub.example.com/your-subscription-key">
+                        <button class="btn btn-blue subscription-load-btn" onclick="loadSubscription()">[ Загрузить ]</button>
+                    </div>
+                    
+                    <div class="subscription-options">
+                        <div class="option-group">
+                            <label>CORS прокси</label>
+                            <select id="cors-proxy" class="proxy-select">
+                                <option value="auto">🔄 Авто (пробовать все по очереди)</option>
+                                <option value="custom">🚀 Свой прокси (Happ-эмуляция)</option>
+                                <option value="corsproxy.io">corsproxy.io</option>
+                                <option value="allorigins.win">allorigins.win</option>
+                                <option value="cors.eu.org">cors.eu.org</option>
+                                <option value="codetabs.com">codetabs.com</option>
+                                <option value="none">Без прокси</option>
+                            </select>
+                        </div>
+                    </div>
+                    
+                    <div id="custom-proxy-block" class="custom-proxy-block" style="display:none;">
+                        <label>URL вашего Worker</label>
+                        <input type="text" id="custom-proxy-url" class="subscription-url-input" 
+                               placeholder="https://vless-proxy.kaibreofficial.workers.dev">
+                        <div class="custom-proxy-hint">
+                            💡 Создайте бесплатный Worker за 2 минуты на 
+                            <a href="https://dash.cloudflare.com/" target="_blank">dash.cloudflare.com</a>
+                        </div>
+                    </div>
+                </div>
+                <!-- ✅ КОНЕЦ Способа 1 -->
+
+                <div class="subscription-divider"><span>или</span></div>
+
+                <!-- Способ 2: Файл -->
+                <div class="sub-method">
+                    <div class="sub-method-header">
+                        <span class="sub-method-badge">2</span>
+                        <span class="sub-method-title">Загрузка файла</span>
+                        <span class="sub-method-hint">(100% работает, без CORS)</span>
+                    </div>
+                    
+                    <div class="file-drop-zone" id="file-drop-zone">
+                        <div class="file-drop-content">
+                            <div class="file-drop-icon">📁</div>
+                            <div class="file-drop-text">Перетащите файл сюда</div>
+                            <div class="file-drop-hint">или</div>
+                            <label class="btn btn-ghost file-select-btn">
+                                [ Выбрать файл ]
+                                <input type="file" id="subscription-file" accept=".txt,.json,.yaml,.yml,.conf,*/*" style="display:none">
+                            </label>
+                            <div class="file-drop-hint">
+                                💡 Скачайте подписку через браузер (Ctrl+S) и загрузите сюда
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <!-- ✅ КОНЕЦ Способа 2 -->
+
+                <div class="subscription-divider"><span>или</span></div>
+
+                <!-- Способ 3: Вручную -->
+                <div class="sub-method">
+                    <div class="sub-method-header">
+                        <span class="sub-method-badge">3</span>
+                        <span class="sub-method-title">Вставка вручную</span>
+                    </div>
+                    
+                    <label>Содержимое подписки</label>
+                    <textarea id="subscription-raw" placeholder="Вставьте сюда содержимое подписки...&#10;&#10;Поддерживаются форматы:&#10;• Base64 (стандартный и URL-safe)&#10;• Gzip + Base64&#10;• Простой текст со ссылками vless://&#10;• JSON с массивом прокси"></textarea>
+                    
+                    <div class="convert-row">
+                        <button class="btn btn-blue" onclick="parseSubscriptionManual()">[ Обработать содержимое ]</button>
+                    </div>
+                </div>
+                <!-- ✅ КОНЕЦ Способа 3 -->
+
+                <!-- Диагностика -->
+                <div class="debug-toggle" onclick="toggleDebug()">
+                    <span id="debug-toggle-text">▶ Показать диагностику</span>
+                </div>
+                <div class="debug-panel" id="debug-panel" style="display:none;">
+                    <div class="debug-title">// Диагностика</div>
+                    <div id="debug-content" class="debug-content">Нет данных</div>
+                </div>
+
+            </div>
+            <!-- ✅ КОНЕЦ вкладки Подписка -->
+
+            <!-- ==================== KOALA CLASH ==================== -->
+            <div id="koala" class="tab-content">
                 <label>YAML конфиг Koala Clash</label>
                 <textarea id="koala-input" placeholder="proxies:&#10;  - name: 'Server 1'&#10;    type: vless&#10;    server: example.com&#10;    port: 443&#10;    uuid: xxx-xxx-xxx&#10;    tls: true"></textarea>
             </div>
 
+            <!-- ==================== HAPP JSON ==================== -->
             <div id="happ" class="tab-content">
                 <label>JSON конфиг Happ</label>
                 <textarea id="happ-input" placeholder='{"outbounds": [{"protocol": "vless", ...}]}'></textarea>
             </div>
 
-            <div class="convert-row">
-                <button class="btn btn-blue" onclick="convert()">[ ⚡ Конвертировать ]</button>
+            <!-- Кнопка конвертации (скрыта по умолчанию для вкладки Подписка) -->
+            <div class="convert-row" id="main-convert-row" style="display:none;">
+                <button class="btn btn-blue" onclick="convert()">[ Конвертировать ]</button>
             </div>
+            
             <div class="status-bar" id="statusBar">
                 <div class="dot-status"></div>
                 <span id="statusText">ожидание ввода...</span>
@@ -53,6 +158,7 @@
         </div>
     </div>
 
+    <!-- ==================== РЕЗУЛЬТАТЫ ==================== -->
     <div class="terminal-card result-section" id="result-section" style="display:none;">
         <div class="terminal-topbar">
             <div class="dot red"></div><div class="dot yellow"></div><div class="dot green"></div>
@@ -62,13 +168,13 @@
             <div class="result-header">
                 <div class="result-count" id="result-count">Найдено: 0 ссылок</div>
                 <div class="btn-row result-actions">
-                    <button class="btn btn-ghost" onclick="copyAll()">[ 📋 Копировать все ]</button>
-                    <button class="btn btn-ghost" onclick="downloadAll()">[ 💾 Скачать ]</button>
+                    <button class="btn btn-ghost" onclick="copyAll()">[ Копировать все ]</button>
+                    <button class="btn btn-ghost" onclick="downloadAll()">[ Скачать ]</button>
                 </div>
             </div>
             <div id="results-list" class="results-list"></div>
             <div class="btn-row">
-                <button class="btn btn-ghost" onclick="clearAll()">[ 🗑️ Очистить ]</button>
+                <button class="btn btn-ghost" onclick="clearAll()">[ Очистить ]</button>
             </div>
         </div>
     </div>
