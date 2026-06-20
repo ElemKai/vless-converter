@@ -3,60 +3,309 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Koala Clash / Happ JSON Converter</title>
+    <title>VLESS Tools — Набор инструментов для работы с VLESS</title>
+    <meta name="description" content="Бесплатные онлайн-инструменты для работы с VLESS: конвертер конфигов, чекер серверов, генератор WireGuard.">
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
-    <div class="container">
-        <header>
-            <h1>🔄 Конвертер конфигов</h1>
-            <p class="subtitle">Koala Clash → VLESS | Happ JSON → VLESS</p>
-        </header>
 
-        <div class="tabs">
-            <button class="tab-btn active" data-tab="koala">Koala Clash</button>
-            <button class="tab-btn" data-tab="happ">Happ JSON</button>
-        </div>
+<!-- Header -->
+<header class="site-header">
+    <div class="header-inner">
+        <a href="index.html" class="header-logo">VLESS</a>
 
-        <!-- Koala Clash Tab -->
-        <div id="koala" class="tab-content active">
-            <div class="input-section">
-                <label for="koala-input">Вставьте конфиг Koala Clash:</label>
-                <textarea id="koala-input" placeholder="Вставьте сюда YAML/JSON конфиг Koala Clash..."></textarea>
-            </div>
-            <button class="convert-btn" onclick="convertKoala()">Конвертировать в VLESS</button>
-        </div>
-
-        <!-- Happ JSON Tab -->
-        <div id="happ" class="tab-content">
-            <div class="input-section">
-                <label for="happ-input">Вставьте JSON конфиг Happ:</label>
-                <textarea id="happ-input" placeholder='{"outbounds": [...], ...}'></textarea>
-            </div>
-            <button class="convert-btn" onclick="convertHapp()">Конвертировать в VLESS</button>
-        </div>
-
-        <!-- Result Section -->
-        <div id="result-section" class="result-section" style="display: none;">
-            <div class="result-header">
-                <h2>✅ Результат: <span id="result-count"></span></h2>
-                <div class="result-actions-top">
-                    <button class="action-btn copy-all-btn" onclick="copyAll()">📋 Копировать все</button>
-                    <button class="action-btn download-btn" onclick="downloadAll()">💾 Скачать файл</button>
+        <nav class="header-nav">
+            <a href="index.html" class="nav-link active">[ Главная ]</a>
+            
+            <div class="nav-dropdown">
+                <div class="nav-dropdown-toggle">
+                    [ Инструменты ] <span class="arrow">▼</span>
+                </div>
+                <div class="nav-dropdown-menu">
+                    <a href="converter.html">
+                        <span class="tool-icon">⚡</span> VLESS Converter
+                    </a>
+                    <a href="#">
+                        <span class="tool-icon">🔍</span> VLESS Checker
+                    </a>
+                    <a href="#">
+                        <span class="tool-icon">🛡</span> WireGuard Generator
+                    </a>
+                    <a href="#">
+                        <span class="tool-icon">🔧</span> Config Editor
+                    </a>
                 </div>
             </div>
-            <div id="results-list" class="results-list"></div>
-            <div class="actions">
-                <button class="action-btn clear-btn" onclick="clearAll()">🗑️ Очистить</button>
-            </div>
-            <div id="message" class="message"></div>
-        </div>
 
-        <footer>
-            <p>Работает полностью в браузере • Данные не отправляются на сервер</p>
-        </footer>
+            <div class="nav-dropdown">
+                <div class="nav-dropdown-toggle">
+                    [ О проекте ] <span class="arrow">▼</span>
+                </div>
+                <div class="nav-dropdown-menu">
+                    <a href="#features">
+                        <span class="tool-icon">📖</span> Возможности
+                    </a>
+                    <a href="#tools">
+                        <span class="tool-icon">🛠</span> Инструменты
+                    </a>
+                    <a href="#">
+                        <span class="tool-icon">⭐</span> GitHub
+                    </a>
+                </div>
+            </div>
+        </nav>
+
+        <div class="header-right">
+            <a href="https://yoomoney.ru/to/4100119557658879" target="_blank" class="donate-btn">
+                <span class="donate-dot">💛</span>
+                <span class="donate-info">
+                    <span class="donate-main" id="donateText">Поддержать</span>
+                    <span class="donate-sub" id="donateSub">проект</span>
+                </span>
+            </a>
+            <div class="status-badge online">
+                <div class="status-dot"></div>
+                <div class="status-info">
+                    <span class="s-main">ОНЛАЙН</span>
+                    <span class="s-sub">Все системы работают</span>
+                </div>
+            </div>
+            <button class="burger-btn" id="burgerBtn" onclick="toggleMobile()" aria-label="Меню">
+                <span></span><span></span><span></span>
+            </button>
+        </div>
+    </div>
+</header>
+
+<!-- Mobile menu -->
+<div class="mobile-menu" id="mobileMenu">
+    <a href="index.html" class="active">[ Главная ]</a>
+    <a href="https://yoomoney.ru/to/4100119516467414" target="_blank" style="color:#f59e0b;border-color:rgba(245,158,11,0.3);">💛 Поддержать проект</a>
+    <hr class="mobile-menu-divider">
+    <div class="mobile-menu-label">// Инструменты</div>
+    <div class="mobile-tools">
+        <a href="converter.html">⚡ VLESS Converter</a>
+        <a href="#">🔍 VLESS Checker</a>
+        <a href="#">🛡 WireGuard Generator</a>
+        <a href="#">🔧 Config Editor</a>
+    </div>
+    <hr class="mobile-menu-divider">
+    <div class="mobile-menu-label">// О проекте</div>
+    <div class="mobile-tools">
+        <a href="#features">📖 Возможности</a>
+        <a href="#tools">🛠 Инструменты</a>
+        <a href="#">⭐ GitHub</a>
+    </div>
+</div>
+
+<!-- Hero Section -->
+<div class="wrapper">
+    <div class="hero">
+        <div class="hero-logo">VLESS</div>
+        <p class="hero-subtitle">root@tools:~$ ./init --mode=production</p>
+        <h1 class="hero-title">Набор инструментов<br>для работы с <span class="gradient-text">VLESS</span></h1>
+        <p class="hero-description">
+            Бесплатные онлайн-инструменты для конвертации конфигов, проверки серверов 
+            и генерации подключений. Работает прямо в браузере — ваши данные никуда не отправляются.
+        </p>
+        <div class="hero-buttons">
+            <a href="converter.html" class="btn btn-blue btn-large">[ ⚡ Открыть конвертер ]</a>
+            <a href="#tools" class="btn btn-ghost btn-large">[ 📋 Все инструменты ]</a>
+        </div>
+        <div class="hero-stats">
+            <div class="stat-item">
+                <div class="stat-value">100%</div>
+                <div class="stat-label">В браузере</div>
+            </div>
+            <div class="stat-item">
+                <div class="stat-value">0</div>
+                <div class="stat-label">Серверов</div>
+            </div>
+            <div class="stat-item">
+                <div class="stat-value">∞</div>
+                <div class="stat-label">Конвертаций</div>
+            </div>
+        </div>
     </div>
 
-    <script src="converter.js"></script>
+    <!-- Features Section -->
+    <section id="features" class="section">
+        <div class="section-header">
+            <div class="section-label">// возможности</div>
+            <h2 class="section-title">Почему наши инструменты?</h2>
+        </div>
+        <div class="features-grid">
+            <div class="feature-card">
+                <div class="feature-icon">🔒</div>
+                <h3 class="feature-title">Приватность</h3>
+                <p class="feature-text">Вся обработка происходит в вашем браузере. Конфиги никуда не отправляются — никаких серверов, никакой телеметрии.</p>
+            </div>
+            <div class="feature-card">
+                <div class="feature-icon">⚡</div>
+                <h3 class="feature-title">Мгновенно</h3>
+                <p class="feature-text">Конвертация выполняется за миллисекунды. Никаких ожиданий, очередей или лимитов — работает сразу.</p>
+            </div>
+            <div class="feature-card">
+                <div class="feature-icon">📱</div>
+                <h3 class="feature-title">Адаптивно</h3>
+                <p class="feature-text">Отлично работает на любом устройстве: десктоп, планшет, смартфон. Интерфейс подстраивается под экран.</p>
+            </div>
+            <div class="feature-card">
+                <div class="feature-icon">🆓</div>
+                <h3 class="feature-title">Бесплатно</h3>
+                <p class="feature-text">Все инструменты полностью бесплатны. Без регистрации, без подписок, без скрытых платежей.</p>
+            </div>
+            <div class="feature-card">
+                <div class="feature-icon">🛠</div>
+                <h3 class="feature-title">Много форматов</h3>
+                <p class="feature-text">Поддержка Koala Clash (YAML), Happ JSON, Xray, V2Ray и других популярных форматов конфигураций.</p>
+            </div>
+            <div class="feature-card">
+                <div class="feature-icon">💾</div>
+                <h3 class="feature-title">Массовая обработка</h3>
+                <p class="feature-text">Конвертируйте сразу все серверы из конфига. Копируйте одной кнопкой или скачивайте файлом.</p>
+            </div>
+        </div>
+    </section>
+
+    <!-- Tools Section -->
+    <section id="tools" class="section">
+        <div class="section-header">
+            <div class="section-label">// инструменты</div>
+            <h2 class="section-title">Доступные инструменты</h2>
+        </div>
+        <div class="tools-grid">
+            <a href="converter.html" class="tool-card featured">
+                <div class="tool-badge">Активно</div>
+                <div class="tool-icon-large">⚡</div>
+                <h3 class="tool-title">VLESS Converter</h3>
+                <p class="tool-description">Конвертация конфигов Koala Clash и Happ JSON в VLESS-ссылки. Поддержка TLS, Reality, WebSocket.</p>
+                <div class="tool-tags">
+                    <span class="tag">Koala Clash</span>
+                    <span class="tag">Happ JSON</span>
+                    <span class="tag">VLESS</span>
+                </div>
+                <div class="tool-arrow">→</div>
+            </a>
+            <a href="#" class="tool-card">
+                <div class="tool-badge soon">Скоро</div>
+                <div class="tool-icon-large">🔍</div>
+                <h3 class="tool-title">VLESS Checker</h3>
+                <p class="tool-description">Проверка работоспособности VLESS-серверов. Пинг, скорость, доступность.</p>
+                <div class="tool-tags">
+                    <span class="tag">Проверка</span>
+                    <span class="tag">Пинг</span>
+                </div>
+                <div class="tool-arrow">→</div>
+            </a>
+            <a href="#" class="tool-card">
+                <div class="tool-badge soon">Скоро</div>
+                <div class="tool-icon-large">🛡</div>
+                <h3 class="tool-title">WireGuard Generator</h3>
+                <p class="tool-description">Генерация конфигов WireGuard с ключами, IP-адресами и настройками peer.</p>
+                <div class="tool-tags">
+                    <span class="tag">WireGuard</span>
+                    <span class="tag">Keys</span>
+                </div>
+                <div class="tool-arrow">→</div>
+            </a>
+            <a href="#" class="tool-card">
+                <div class="tool-badge soon">Скоро</div>
+                <div class="tool-icon-large">🔧</div>
+                <h3 class="tool-title">Config Editor</h3>
+                <p class="tool-description">Редактор конфигов с подсветкой синтаксиса, валидацией и экспортом.</p>
+                <div class="tool-tags">
+                    <span class="tag">Editor</span>
+                    <span class="tag">JSON</span>
+                    <span class="tag">YAML</span>
+                </div>
+                <div class="tool-arrow">→</div>
+            </a>
+        </div>
+    </section>
+
+    <!-- How it works -->
+    <section class="section">
+        <div class="section-header">
+            <div class="section-label">// как это работает</div>
+            <h2 class="section-title">Три простых шага</h2>
+        </div>
+        <div class="steps">
+            <div class="step">
+                <div class="step-number">01</div>
+                <h3 class="step-title">Вставьте конфиг</h3>
+                <p class="step-text">Скопируйте YAML-конфиг Koala Clash или JSON-конфиг Happ в соответствующее поле.</p>
+            </div>
+            <div class="step-arrow">→</div>
+            <div class="step">
+                <div class="step-number">02</div>
+                <h3 class="step-title">Конвертируйте</h3>
+                <p class="step-text">Нажмите кнопку и получите список VLESS-ссылок для всех серверов из конфига.</p>
+            </div>
+            <div class="step-arrow">→</div>
+            <div class="step">
+                <div class="step-number">03</div>
+                <h3 class="step-title">Используйте</h3>
+                <p class="step-text">Копируйте нужные ссылки, скачивайте все сразу или делитесь с друзьями.</p>
+            </div>
+        </div>
+        <div class="cta-center">
+            <a href="converter.html" class="btn btn-blue btn-large">[ ⚡ Попробовать сейчас ]</a>
+        </div>
+    </section>
+
+    <footer>© 2026 — VLESS Tools. Built on Linux. Powered by freedom.</footer>
+</div>
+
+<script>
+// Мобильное меню
+function toggleMobile() {
+    const btn = document.getElementById('burgerBtn');
+    const menu = document.getElementById('mobileMenu');
+    btn.classList.toggle('open');
+    menu.classList.toggle('open');
+}
+
+document.addEventListener('click', function(e) {
+    const btn = document.getElementById('burgerBtn');
+    const menu = document.getElementById('mobileMenu');
+    if (btn && menu && !btn.contains(e.target) && !menu.contains(e.target)) {
+        btn.classList.remove('open');
+        menu.classList.remove('open');
+    }
+});
+
+// Анимация текста "Поддержать проект"
+document.addEventListener('DOMContentLoaded', function() {
+    const chars = '0123456789ABCDEF#$%&!?*+=-[]';
+    const elMain = document.getElementById('donateText');
+    const elSub = document.getElementById('donateSub');
+    
+    if (elMain && elSub) {
+        function scramble(el, final) {
+            let frame = 0;
+            const total = 16;
+            const timer = setInterval(() => {
+                el.textContent = final.split('').map((c, i) => {
+                    if (frame > total - final.length + i) return c;
+                    return chars[Math.floor(Math.random() * chars.length)];
+                }).join('');
+                if (++frame > total + final.length) {
+                    clearInterval(timer);
+                    el.textContent = final;
+                }
+            }, 45);
+        }
+        
+        function run() {
+            scramble(elMain, 'Поддержать');
+            setTimeout(() => scramble(elSub, 'проект'), 150);
+        }
+        
+        setTimeout(run, 2000);
+        setInterval(run, 6000);
+    }
+});
+</script>
 </body>
 </html>

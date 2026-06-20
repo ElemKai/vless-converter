@@ -1,12 +1,14 @@
 // Глобальная переменная для хранения результатов
 let currentResults = [];
+let currentTab = 'koala';
 
-// Ждем полной загрузки DOM
+// Инициализация после загрузки DOM
 document.addEventListener('DOMContentLoaded', function() {
     // Tab switching
     document.querySelectorAll('.tab-btn').forEach(btn => {
         btn.addEventListener('click', function() {
             const tabName = this.dataset.tab;
+            currentTab = tabName;
             
             document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
             this.classList.add('active');
@@ -15,55 +17,223 @@ document.addEventListener('DOMContentLoaded', function() {
             document.getElementById(tabName).classList.add('active');
         });
     });
+
+    // Анимация текста "Поддержать проект"
+    const chars = '0123456789ABCDEF#$%&!?*+=-[]';
+    const elMain = document.getElementById('donateText');
+    const elSub = document.getElementById('donateSub');
+    
+    if (elMain && elSub) {
+        function scramble(el, final) {
+            let frame = 0;
+            const total = 16;
+            const timer = setInterval(() => {
+                el.textContent = final.split('').map((c, i) => {
+                    if (frame > total - final.length + i) return c;
+                    return chars[Math.floor(Math.random() * chars.length)];
+                }).join('');
+                if (++frame > total + final.length) {
+                    clearInterval(timer);
+                    el.textContent = final;
+                }
+            }, 45);
+        }
+        
+        function run() {
+            scramble(elMain, 'Поддержать');
+            setTimeout(() => scramble(elSub, 'проект'), 150);
+        }
+        
+        setTimeout(run, 2000);
+        setInterval(run, 6000);
+    }
 });
 
-// Show message
-function showMessage(text, type = 'success') {
-    const msgDiv = document.getElementById('message');
-    const resultSection = document.getElementById('result-section');
-    
-    resultSection.style.display = 'block';
-    msgDiv.textContent = text;
-    msgDiv.className = `message ${type}`;
-    
-    resultSection.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-    
-    setTimeout(() => {
-        msgDiv.style.display = 'none';
-    }, 5000);
+// Мобильное меню
+function toggleMobile() {
+    const btn = document.getElementById('burgerBtn');
+    const menu = document.getElementById('mobileMenu');
+    btn.classList.toggle('open');
+    menu.classList.toggle('open');
 }
 
-// Clear all
-function clearAll() {
-    document.getElementById('koala-input').value = '';
-    document.getElementById('happ-input').value = '';
-    document.getElementById('results-list').innerHTML = '';
-    document.getElementById('result-section').style.display = 'none';
-    document.getElementById('message').style.display = 'none';
-    currentResults = [];
+// Закрыть мобильное меню при клике вне его
+document.addEventListener('click', function(e) {
+    const btn = document.getElementById('burgerBtn');
+    const menu = document.getElementById('mobileMenu');
+    if (btn && menu && !btn.contains(e.target) && !menu.contains(e.target)) {
+        btn.classList.remove('open');
+        menu.classList.remove('open');
+    }
+});
+
+// Установка статуса
+function setStatus(type, text) {
+    const sb = document.getElementById('statusBar');
+    sb.className = 'status-bar ' + type;
+    document.getElementById('statusText').textContent = text;
 }
 
-// Copy all results
+// Главная функция конвертации
+function convert() {
+    if (currentTab === 'koala') {
+        convertKoala();
+    } else {
+        convertHapp();
+    }
+}
+
+// ==================== Koala Clash конвертация ====================
+
+function convertKoala() {
+    const input = document.getElementById('koala-input').value.trim();
+    
+    if (!input) {
+        setStatus('err', '[ ERROR ] пустой ввод');
+        return;
+    }
+    
+    try {
+        let config;
+        
+        try {
+            config = JSON.parse(input);
+        } catch (e) {
+            config = parseKoalaConfig(input);
+        }
+        
+        const results = koalaToVlessArray(config);
+        
+        if (results.length === 0) {
+            setStatus('err', '[ ERROR ] не найдено VLESS прокси');
+            return;
+        }
+        
+        renderResults(results);
+        const timeStr = new Date().toLocaleTimeString('ru');
+        setStatus('ok', `[ OK ] конвертация выполнена (${results.length} шт.) — ${timeStr}`);
+    } catch (e) {
+        setStatus('err', '[ ERROR ] ' + e.message);
+    }
+}
+
+// ==================== Happ JSON конвертация ====================
+
+function convertHapp() {
+    const input = document.getElementById('happ-input').value.trim();
+    
+    if (!input) {
+        setStatus('err', '[ ERROR ] пустой ввод');
+        return;
+    }
+    
+    try {
+        const config = JSON.parse(input);
+        const results = jsonToVlessArray(config);
+        
+        if (results.length === 0) {
+            setStatus('err', '[ ERROR ] не найдено VLESS outbound');
+            return;
+        }
+        
+        renderResults(results);
+        const timeStr = new Date().toLocaleTimeString('ru');
+        setStatus('ok', `[ OK ] конвертация выполнена (${results.length} шт.) — ${timeStr}`);
+    } catch (e) {
+        setStatus('err', '[ ERROR ] ' + e.message);
+    }
+}
+
+// ==================== Рендер результатов ====================
+
+function renderResults(results) {
+    currentResults = results;
+    const listDiv = document.getElementById('results-list');
+    const countSpan = document.getElementById('result-count');
+    
+    countSpan.textContent = `Найдено: ${results.length} ссылок`;
+    listDiv.innerHTML = '';
+    
+    results.forEach((item, index) => {
+        const itemDiv = document.createElement('div');
+        itemDiv.className = 'result-item';
+        
+        itemDiv.innerHTML = `
+            <div class="result-item-header">
+                <div class="result-item-name">${escapeHtml(item.name)}</div>
+                <button class="copy-item-btn" data-copy-index="${index}" onclick="copyItem(${index})">[ Copy ]</button>
+            </div>
+            <textarea class="result-item-link" readonly>${escapeHtml(item.link)}</textarea>
+        `;
+        
+        listDiv.appendChild(itemDiv);
+    });
+    
+    document.getElementById('result-section').style.display = 'block';
+    document.getElementById('result-section').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+
+function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+}
+
+// ==================== Действия с результатами ====================
+
+function copyItem(index) {
+    const item = currentResults[index];
+    if (!item) return;
+    
+    const btn = document.querySelector(`[data-copy-index="${index}"]`);
+    
+    navigator.clipboard.writeText(item.link).then(() => {
+        if (btn) {
+            btn.textContent = '[ Copied! ]';
+            btn.classList.add('copied');
+            setTimeout(() => {
+                btn.textContent = '[ Copy ]';
+                btn.classList.remove('copied');
+            }, 2000);
+        }
+    }).catch(() => {
+        // Fallback
+        const textarea = document.createElement('textarea');
+        textarea.value = item.link;
+        document.body.appendChild(textarea);
+        textarea.select();
+        document.execCommand('copy');
+        document.body.removeChild(textarea);
+        
+        if (btn) {
+            btn.textContent = '[ Copied! ]';
+            btn.classList.add('copied');
+            setTimeout(() => {
+                btn.textContent = '[ Copy ]';
+                btn.classList.remove('copied');
+            }, 2000);
+        }
+    });
+}
+
 function copyAll() {
     if (currentResults.length === 0) return;
     
     const allLinks = currentResults.map(r => r.link).join('\n');
     
     navigator.clipboard.writeText(allLinks).then(() => {
-        showMessage(`✅ Скопировано ${currentResults.length} ссылок!`);
+        setStatus('ok', `[ OK ] скопировано ${currentResults.length} ссылок`);
     }).catch(() => {
-        // Fallback
         const textarea = document.createElement('textarea');
         textarea.value = allLinks;
         document.body.appendChild(textarea);
         textarea.select();
         document.execCommand('copy');
         document.body.removeChild(textarea);
-        showMessage(`✅ Скопировано ${currentResults.length} ссылок!`);
+        setStatus('ok', `[ OK ] скопировано ${currentResults.length} ссылок`);
     });
 }
 
-// Download all results as file
 function downloadAll() {
     if (currentResults.length === 0) return;
     
@@ -79,104 +249,19 @@ function downloadAll() {
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
     
-    showMessage(`💾 Файл скачан с ${currentResults.length} ссылками!`);
+    setStatus('ok', `[ OK ] файл скачан (${currentResults.length} ссылок)`);
 }
 
-// Copy single item
-function copyItem(index) {
-    const item = currentResults[index];
-    if (!item) return;
-    
-    navigator.clipboard.writeText(item.link).then(() => {
-        const btn = document.querySelector(`[data-copy-index="${index}"]`);
-        if (btn) {
-            btn.textContent = '✓ Скопировано';
-            btn.classList.add('copied');
-            setTimeout(() => {
-                btn.textContent = '📋 Копировать';
-                btn.classList.remove('copied');
-            }, 2000);
-        }
-    }).catch(() => {
-        const textarea = document.createElement('textarea');
-        textarea.value = item.link;
-        document.body.appendChild(textarea);
-        textarea.select();
-        document.execCommand('copy');
-        document.body.removeChild(textarea);
-        
-        const btn = document.querySelector(`[data-copy-index="${index}"]`);
-        if (btn) {
-            btn.textContent = '✓ Скопировано';
-            btn.classList.add('copied');
-            setTimeout(() => {
-                btn.textContent = '📋 Копировать';
-                btn.classList.remove('copied');
-            }, 2000);
-        }
-    });
+function clearAll() {
+    document.getElementById('koala-input').value = '';
+    document.getElementById('happ-input').value = '';
+    document.getElementById('results-list').innerHTML = '';
+    document.getElementById('result-section').style.display = 'none';
+    currentResults = [];
+    setStatus('', 'ожидание ввода...');
 }
 
-// Render results list
-function renderResults(results) {
-    currentResults = results;
-    const listDiv = document.getElementById('results-list');
-    const countSpan = document.getElementById('result-count');
-    
-    countSpan.textContent = `(${results.length} шт.)`;
-    listDiv.innerHTML = '';
-    
-    results.forEach((item, index) => {
-        const itemDiv = document.createElement('div');
-        itemDiv.className = 'result-item';
-        
-        itemDiv.innerHTML = `
-            <div class="result-item-header">
-                <div class="result-item-name">${escapeHtml(item.name)}</div>
-                <button class="copy-item-btn" data-copy-index="${index}" onclick="copyItem(${index})">📋 Копировать</button>
-            </div>
-            <textarea class="result-item-link" readonly>${escapeHtml(item.link)}</textarea>
-        `;
-        
-        listDiv.appendChild(itemDiv);
-    });
-    
-    document.getElementById('result-section').style.display = 'block';
-    document.getElementById('result-section').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-}
-
-// Escape HTML
-function escapeHtml(text) {
-    const div = document.createElement('div');
-    div.textContent = text;
-    return div.innerHTML;
-}
-
-// ==================== Happ JSON конвертация ====================
-
-function convertHapp() {
-    const input = document.getElementById('happ-input').value.trim();
-    
-    if (!input) {
-        showMessage('❌ Введите JSON конфиг', 'error');
-        return;
-    }
-    
-    try {
-        const config = JSON.parse(input);
-        const results = jsonToVlessArray(config);
-        
-        if (results.length === 0) {
-            showMessage('❌ Не найдено outbound с протоколом VLESS', 'error');
-            return;
-        }
-        
-        renderResults(results);
-        showMessage(`✅ Найдено ${results.length} VLESS-ссылок!`);
-    } catch (e) {
-        showMessage(`❌ Ошибка: ${e.message}`, 'error');
-    }
-}
+// ==================== Happ JSON: парсинг и построение VLESS ====================
 
 function jsonToVlessArray(configJson) {
     let config;
@@ -188,7 +273,6 @@ function jsonToVlessArray(configJson) {
     
     const results = [];
     
-    // Ищем все VLESS outbound
     for (const outbound of config.outbounds || []) {
         if (outbound.protocol === 'vless') {
             try {
@@ -288,40 +372,8 @@ function buildVlessFromOutbound(vlessOutbound, remarks) {
     return vlessUrl;
 }
 
-// ==================== Koala Clash конвертация ====================
+// ==================== Koala Clash: парсинг YAML ====================
 
-function convertKoala() {
-    const input = document.getElementById('koala-input').value.trim();
-    
-    if (!input) {
-        showMessage('❌ Введите конфиг Koala Clash', 'error');
-        return;
-    }
-    
-    try {
-        let config;
-        
-        try {
-            config = JSON.parse(input);
-        } catch (e) {
-            config = parseKoalaConfig(input);
-        }
-        
-        const results = koalaToVlessArray(config);
-        
-        if (results.length === 0) {
-            showMessage('❌ Не найдено прокси типа VLESS в конфиге', 'error');
-            return;
-        }
-        
-        renderResults(results);
-        showMessage(`✅ Найдено ${results.length} VLESS-ссылок!`);
-    } catch (e) {
-        showMessage(`❌ Ошибка: ${e.message}`, 'error');
-    }
-}
-
-// Улучшенный YAML-парсер для Koala Clash
 function parseKoalaConfig(text) {
     const config = { proxies: [] };
     const lines = text.split('\n');
@@ -329,39 +381,30 @@ function parseKoalaConfig(text) {
     let currentProxy = null;
     let inProxies = false;
     let currentKey = null;
-    let currentArrayKey = null;
     
     for (let i = 0; i < lines.length; i++) {
         const rawLine = lines[i];
         const trimmed = rawLine.trim();
         
-        // Пустые строки и комментарии
         if (!trimmed || trimmed.startsWith('#')) continue;
         
-        // Определяем отступ
         const indent = rawLine.length - rawLine.trimStart().length;
         
-        // Начало секции proxies
         if (trimmed === 'proxies:') {
             inProxies = true;
             continue;
         }
         
-        // Если не в proxies - пропускаем
         if (!inProxies) continue;
         
-        // Начало нового прокси (- name: ...)
         if (trimmed.startsWith('- ')) {
-            // Сохраняем предыдущий прокси
             if (currentProxy) {
                 config.proxies.push(currentProxy);
             }
             
             currentProxy = {};
             currentKey = null;
-            currentArrayKey = null;
             
-            // Парсим первую строку прокси
             const content = trimmed.substring(2).trim();
             if (content.includes(':')) {
                 const colonIndex = content.indexOf(':');
@@ -373,19 +416,14 @@ function parseKoalaConfig(text) {
             continue;
         }
         
-        // Если нет текущего прокси - пропускаем
         if (!currentProxy) continue;
         
-        // Обработка вложенных структур (headers, etc.)
         if (trimmed.endsWith(':') && !trimmed.includes(': ')) {
-            // Это начало вложенного объекта
             currentKey = trimmed.slice(0, -1).trim();
             currentProxy[currentKey] = {};
-            currentArrayKey = null;
             continue;
         }
         
-        // Обработка массивов (- value)
         if (trimmed.startsWith('- ') && currentKey && typeof currentProxy[currentKey] === 'object' && !Array.isArray(currentProxy[currentKey])) {
             if (!Array.isArray(currentProxy[currentKey])) {
                 currentProxy[currentKey] = [];
@@ -394,13 +432,11 @@ function parseKoalaConfig(text) {
             continue;
         }
         
-        // Обычное ключ: значение
         if (trimmed.includes(':')) {
             const colonIndex = trimmed.indexOf(':');
             const key = trimmed.substring(0, colonIndex).trim();
             const valueStr = trimmed.substring(colonIndex + 1).trim();
             
-            // Если это вложенный ключ (есть отступ больше базового)
             if (indent > 6 && currentKey && typeof currentProxy[currentKey] === 'object') {
                 currentProxy[currentKey][key] = parseYamlValue(valueStr);
             } else {
@@ -410,7 +446,6 @@ function parseKoalaConfig(text) {
         }
     }
     
-    // Не забываем добавить последний прокси
     if (currentProxy) {
         config.proxies.push(currentProxy);
     }
@@ -418,28 +453,23 @@ function parseKoalaConfig(text) {
     return config;
 }
 
-// Парсинг значения YAML
 function parseYamlValue(valueStr) {
     if (!valueStr) return '';
     
-    // Убираем кавычки
     if ((valueStr.startsWith("'") && valueStr.endsWith("'")) ||
         (valueStr.startsWith('"') && valueStr.endsWith('"'))) {
         return valueStr.slice(1, -1);
     }
     
-    // Boolean
     if (valueStr === 'true') return true;
     if (valueStr === 'false') return false;
     
-    // Number
     if (/^\d+$/.test(valueStr)) return parseInt(valueStr, 10);
     if (/^\d+\.\d+$/.test(valueStr)) return parseFloat(valueStr);
     
     return valueStr;
 }
 
-// Конвертация всех VLESS прокси из Koala Clash
 function koalaToVlessArray(config) {
     const results = [];
     
@@ -460,7 +490,6 @@ function koalaToVlessArray(config) {
     return results;
 }
 
-// Построение VLESS ссылки из одного Koala прокси
 function buildVlessFromKoalaProxy(vlessProxy) {
     const uuid = vlessProxy.uuid || vlessProxy.id;
     const address = vlessProxy.server || vlessProxy.address;
@@ -474,7 +503,6 @@ function buildVlessFromKoalaProxy(vlessProxy) {
     params['security'] = (vlessProxy.tls === true || vlessProxy.tls === 'true') ? 'tls' : 'none';
     params['type'] = vlessProxy.network || 'tcp';
     
-    // Network-specific settings
     if (params['type'] === 'ws') {
         if (vlessProxy.path) params['path'] = vlessProxy.path;
         if (vlessProxy.host) {
@@ -488,7 +516,6 @@ function buildVlessFromKoalaProxy(vlessProxy) {
         if (vlessProxy.host) params['host'] = vlessProxy.host;
     }
     
-    // TLS settings
     if (params['security'] === 'tls') {
         if (vlessProxy.servername) params['sni'] = vlessProxy.servername;
         else if (vlessProxy.sni) params['sni'] = vlessProxy.sni;
@@ -500,7 +527,6 @@ function buildVlessFromKoalaProxy(vlessProxy) {
         if (vlessProxy.flow) params['flow'] = vlessProxy.flow;
     }
     
-    // Reality settings
     if (vlessProxy.reality === true || vlessProxy.reality === 'true') {
         params['security'] = 'reality';
         if (vlessProxy.servername) params['sni'] = vlessProxy.servername;
@@ -512,7 +538,6 @@ function buildVlessFromKoalaProxy(vlessProxy) {
         if (vlessProxy.spx || vlessProxy.spiderX) params['spx'] = vlessProxy.spx || vlessProxy.spiderX;
     }
     
-    // Build query string
     const paramOrder = ['security', 'type', 'headerType', 'path', 'host', 'flow', 
                        'sni', 'fp', 'pbk', 'sid', 'spx', 'alpn'];
     
