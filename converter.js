@@ -3,19 +3,8 @@ let currentResults = [];
 let currentTab = 'subscription';
 let lastDebugInfo = {};
 
-// CORS прокси
-const CORS_PROXIES = {
-    'custom': (url, customProxyUrl) => `${customProxyUrl}?url=${encodeURIComponent(url)}`,
-    'corsproxy.io': url => `https://corsproxy.io/?url=${encodeURIComponent(url)}`,
-    'allorigins.win': url => `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`,
-    'allorigins.json': url => `https://api.allorigins.win/get?url=${encodeURIComponent(url)}`,
-    'cors.eu.org': url => `https://cors.eu.org/${url}`,
-    'thingproxy': url => `https://thingproxy.freeboard.io/fetch/${url}`,
-    'codetabs.com': url => `https://api.codetabs.com/v1/proxy/?quest=${encodeURIComponent(url)}`,
-    'none': url => url
-};
-
-const PROXY_ORDER = ['corsproxy.io', 'allorigins.win', 'thingproxy', 'cors.eu.org', 'codetabs.com'];
+// 🚀 Ваш Worker (Happ-эмуляция) — используется всегда
+const CUSTOM_PROXY_URL = 'https://vless-proxy.kaibreofficial.workers.dev';
 
 // ==================== ИНИЦИАЛИЗАЦИЯ ====================
 
@@ -58,25 +47,9 @@ function initTabs() {
     // Скрываем кнопку при загрузке (активна вкладка subscription)
     const mainConvertRow = document.getElementById('main-convert-row');
     if (mainConvertRow) {
-        mainConvertRow.style.display = 'none';
-    }
+        mainConvertRow.style.display = 'none';    }
     
     console.log('[INIT] Вкладки инициализированы. currentTab:', currentTab);
-}
-
-function initCustomProxy() {
-    const proxySelect = document.getElementById('cors-proxy');
-    const customBlock = document.getElementById('custom-proxy-block');
-    
-    if (proxySelect && customBlock) {
-        proxySelect.addEventListener('change', function() {
-            if (this.value === 'custom') {
-                customBlock.style.display = 'block';
-            } else {
-                customBlock.style.display = 'none';
-            }
-        });
-    }
 }
 
 function initFileUpload() {
@@ -123,14 +96,11 @@ function initFileUpload() {
 
 // Запуск
 if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', () => {
-        initTabs();
-        initCustomProxy();
+    document.addEventListener('DOMContentLoaded', () => {        initTabs();
         initFileUpload();
     });
 } else {
     initTabs();
-    initCustomProxy();
     initFileUpload();
 }
 
@@ -175,8 +145,7 @@ function renderDebug() {
 
 function toggleDebug() {
     const panel = document.getElementById('debug-panel');
-    const text = document.getElementById('debug-toggle-text');
-    if (panel.style.display === 'none') {
+    const text = document.getElementById('debug-toggle-text');    if (panel.style.display === 'none') {
         panel.style.display = 'block';
         text.textContent = '▼ Скрыть диагностику';
     } else {
@@ -199,216 +168,147 @@ async function loadSubscription() {
         return;
     }
     
-    const proxyChoice = document.getElementById('cors-proxy').value;
-    
     lastDebugInfo = {};
-    updateDebug('start', { url: url, proxy: proxyChoice });
+    updateDebug('start', { url: url, proxy: 'custom (Worker)' });
     
-    setStatus('', '[ INFO ] загрузка...');
+    setStatus('', '[ INFO ] загрузка через Worker...');
+    updateDebug('custom_proxy', { url: CUSTOM_PROXY_URL, hint: 'Happ-эмуляция' });
     
-    let proxiesToTry = [];
-    let customProxyUrl = null;
-    
-    if (proxyChoice === 'custom') {
-        customProxyUrl = document.getElementById('custom-proxy-url').value.trim();
-        if (!customProxyUrl) {
-            setStatus('err', '[ ERROR ] введите URL вашего Worker');
+    try {
+        const proxyUrl = `${CUSTOM_PROXY_URL}?url=${encodeURIComponent(url)}`;
+        
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 15000);
+        
+        const response = await fetch(proxyUrl, {
+            method: 'GET',
+            signal: controller.signal,
+            cache: 'no-cache'
+        });
+        
+        clearTimeout(timeoutId);
+        
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}`);
+        }
+        
+        const content = await response.text();
+        
+        updateDebug('proxy_response', {            status: '✓ успех',
+            size: content.length + ' символов',
+            preview: content.substring(0, 150)
+        });
+        
+        // Проверяем, не HTML ли это
+        const trimmed = content.trim();
+        const isHtml = trimmed.startsWith('<!doctype') || 
+                       trimmed.startsWith('<html') || 
+                       trimmed.startsWith('<HTML') ||
+                       content.includes('<div id="root">');
+        
+        if (!isHtml) {
+            updateDebug('direct_subscription', {
+                type: 'не HTML — подписка',
+                size: content.length + ' символов'
+            });
+            
+            document.getElementById('subscription-raw').value = content;
+            await processSubscriptionContent(content);
             return;
         }
-        if (!customProxyUrl.startsWith('http')) {
-            setStatus('err', '[ ERROR ] URL Worker должен начинаться с http:// или https://');
+        
+        // Ищем VLESS в HTML
+        const vlessLinks = extractAllVlessFromHtml(content);
+        
+        if (vlessLinks.length > 0) {
+            updateDebug('vless_in_html', { count: vlessLinks.length });
+            
+            document.getElementById('subscription-raw').value = content;
+            
+            const results = vlessLinks.map(link => {
+                const parsed = parseVlessLink(link);
+                return { name: parsed.name || 'VLESS Server', link: link };
+            });
+            
+            renderResults(results);
+            const timeStr = new Date().toLocaleTimeString('ru');
+            setStatus('ok', `[ OK ] извлечено ${results.length} VLESS — ${timeStr}`);
             return;
         }
-        customProxyUrl = customProxyUrl.replace(/\/$/, '');
-        proxiesToTry = ['custom'];
-        updateDebug('custom_proxy', { url: customProxyUrl, hint: 'Happ-эмуляция' });
-    } else if (proxyChoice === 'auto') {
-        proxiesToTry = [...PROXY_ORDER];
-    } else if (proxyChoice === 'none') {
-        proxiesToTry = ['none'];
-    } else {
-        proxiesToTry = [proxyChoice];
-    }
-    
-    let lastError = null;
-    let content = null;
-    let usedProxy = null;
-    
-    for (const proxyName of proxiesToTry) {
-        try {
-            setStatus('', `[ INFO ] попытка через ${proxyName}...`);
-            updateDebug(`try_${proxyName}`, 'подключение...');
-            
-            let proxyUrl;
-            if (proxyName === 'custom') {
-                proxyUrl = CORS_PROXIES['custom'](url, customProxyUrl);
-            } else {
-                proxyUrl = CORS_PROXIES[proxyName](url);
-            }
-            
-            const controller = new AbortController();
-            const timeoutId = setTimeout(() => controller.abort(), 15000);
-            
-            const response = await fetch(proxyUrl, {
-                method: 'GET',
-                signal: controller.signal,
-                cache: 'no-cache'
-            });
-            
-            clearTimeout(timeoutId);
-            
-            if (!response.ok) {
-                throw new Error(`HTTP ${response.status}`);
-            }
-            
-            let rawText = await response.text();
-            
-            if (proxyName === 'allorigins.json') {
-                try {
-                    const jsonData = JSON.parse(rawText);
-                    if (jsonData.contents) rawText = jsonData.contents;
-                } catch (e) {}
-            }
-            
-            content = rawText;
-            usedProxy = proxyName;
-            
-            updateDebug(`try_${proxyName}`, {
-                status: '✓ успех',
-                size: content.length + ' символов',
-                preview: content.substring(0, 150)
-            });
-            
-            break;
-            
-        } catch (error) {
-            lastError = error;
-            updateDebug(`try_${proxyName}`, { error: error.message });
-            continue;
-        }
-    }
-    
-    if (!content) {
-        showManualFallback(url, lastError);
-        return;
-    }
-    
-    const trimmed = content.trim();
-    const isHtml = trimmed.startsWith('<!doctype') || 
-                   trimmed.startsWith('<html') || 
-                   trimmed.startsWith('<HTML') ||
-                   content.includes('<div id="root">');
-    
-    if (!isHtml) {
-        updateDebug('direct_subscription', {
-            type: 'не HTML — вероятно подписка',
-            size: content.length + ' символов'
-        });
         
-        document.getElementById('subscription-raw').value = content;
-        await processSubscriptionContent(content);
-        return;
-    }
-    
-    const vlessLinks = extractAllVlessFromHtml(content);
-    
-    if (vlessLinks.length > 0) {
-        updateDebug('vless_in_html', { count: vlessLinks.length });
+        // Ищем subscriptionUrl в data-panel
+        const extractedSubUrl = extractSubscriptionUrlFromHtml(content);
         
-        document.getElementById('subscription-raw').value = content;
-        
-        const results = vlessLinks.map(link => {
-            const parsed = parseVlessLink(link);
-            return { name: parsed.name || 'VLESS Server', link: link };
-        });
-        
-        renderResults(results);
-        const timeStr = new Date().toLocaleTimeString('ru');
-        setStatus('ok', `[ OK ] извлечено ${results.length} VLESS — ${timeStr}`);
-        return;
-    }
-    
-    const extractedSubUrl = extractSubscriptionUrlFromHtml(content);
-    
-    if (extractedSubUrl && extractedSubUrl !== url) {
-        updateDebug('panel_detected', {
-            type: 'Stun.su / V2board',
-            subscriptionUrl: extractedSubUrl
-        });
-        
-        setStatus('', `[ INFO ] загрузка подписки через тот же прокси...`);
-        
-        try {
-            let subProxyUrl;
-            if (usedProxy === 'custom') {
-                subProxyUrl = CORS_PROXIES['custom'](extractedSubUrl, customProxyUrl);
-            } else {
-                subProxyUrl = CORS_PROXIES[usedProxy](extractedSubUrl);
-            }
+        if (extractedSubUrl && extractedSubUrl !== url) {
+            updateDebug('panel_detected', {
+                type: 'Stun.su / V2board',
+                subscriptionUrl: extractedSubUrl
+            });            
+            setStatus('', `[ INFO ] загрузка подписки...`);
             
-            const controller = new AbortController();
-            const timeoutId = setTimeout(() => controller.abort(), 15000);
-            
-            const subResponse = await fetch(subProxyUrl, {
-                method: 'GET',
-                signal: controller.signal,
-                cache: 'no-cache'
-            });
-            
-            clearTimeout(timeoutId);
-            
-            if (!subResponse.ok) {
-                throw new Error(`HTTP ${subResponse.status}`);
-            }
-            
-            let subContent = await subResponse.text();
-            
-            if (usedProxy === 'allorigins.json') {
-                try {
-                    const jsonData = JSON.parse(subContent);
-                    if (jsonData.contents) subContent = jsonData.contents;
-                } catch (e) {}
-            }
-            
-            updateDebug('subscription_response', {
-                size: subContent.length + ' символов',
-                preview: subContent.substring(0, 150)
-            });
-            
-            const subTrimmed = subContent.trim();
-            const subIsHtml = subTrimmed.startsWith('<!doctype') || 
-                              subTrimmed.startsWith('<html') ||
-                              subContent.includes('<div id="root">');
-            
-            if (!subIsHtml) {
-                document.getElementById('subscription-raw').value = subContent;
-                await processSubscriptionContent(subContent);
-                return;
-            }
-            
-            const subVlessLinks = extractAllVlessFromHtml(subContent);
-            if (subVlessLinks.length > 0) {
-                const results = subVlessLinks.map(link => {
-                    const parsed = parseVlessLink(link);
-                    return { name: parsed.name || 'VLESS Server', link: link };
+            try {
+                const subProxyUrl = `${CUSTOM_PROXY_URL}?url=${encodeURIComponent(extractedSubUrl)}`;
+                
+                const controller2 = new AbortController();
+                const timeoutId2 = setTimeout(() => controller2.abort(), 15000);
+                
+                const subResponse = await fetch(subProxyUrl, {
+                    method: 'GET',
+                    signal: controller2.signal,
+                    cache: 'no-cache'
                 });
-                renderResults(results);
-                setStatus('ok', `[ OK ] извлечено ${results.length} VLESS`);
-                return;
+                
+                clearTimeout(timeoutId2);
+                
+                if (!subResponse.ok) {
+                    throw new Error(`HTTP ${subResponse.status}`);
+                }
+                
+                const subContent = await subResponse.text();
+                
+                updateDebug('subscription_response', {
+                    size: subContent.length + ' символов',
+                    preview: subContent.substring(0, 150)
+                });
+                
+                const subTrimmed = subContent.trim();
+                const subIsHtml = subTrimmed.startsWith('<!doctype') || 
+                                  subTrimmed.startsWith('<html') ||
+                                  subContent.includes('<div id="root">');
+                
+                if (!subIsHtml) {
+                    document.getElementById('subscription-raw').value = subContent;
+                    await processSubscriptionContent(subContent);
+                    return;
+                }
+                
+                const subVlessLinks = extractAllVlessFromHtml(subContent);
+                if (subVlessLinks.length > 0) {
+                    const results = subVlessLinks.map(link => {
+                        const parsed = parseVlessLink(link);
+                        return { name: parsed.name || 'VLESS Server', link: link };
+                    });
+                    renderResults(results);
+                    setStatus('ok', `[ OK ] извлечено ${results.length} VLESS`);
+                    return;
+                }
+                                showExtractedUrlModal(extractedSubUrl, subContent);
+                
+            } catch (error) {
+                updateDebug('subscription_error', { error: error.message });
+                showExtractedUrlModal(extractedSubUrl, content);
             }
-            
-            showExtractedUrlModal(extractedSubUrl, subContent);
-            
-        } catch (error) {
-            updateDebug('subscription_error', { error: error.message });
-            showExtractedUrlModal(extractedSubUrl, content);
+        } else {
+            setStatus('err', '[ ERROR ] VLESS не найдены');
+            updateDebug('no_vless', {
+                hint: 'Сервер отдаёт только HTML-страницу.'
+            });
+            showNoVlessModal(content);
         }
-    } else {
-        setStatus('err', '[ ERROR ] VLESS не найдены');
-        updateDebug('no_vless', {
-            hint: 'Сервер отдаёт только HTML-страницу. Нужна прямая ссылка подписки или свой Worker.'
-        });
-        showNoVlessModal(content);
+        
+    } catch (error) {
+        setStatus('err', `[ ERROR ] ${error.message}`);
+        updateDebug('error', { error: error.message });
     }
 }
 
@@ -441,8 +341,7 @@ function extractAllVlessFromHtml(html) {
                 if (clean.startsWith('vless://') && clean.length > 10) {
                     allLinks.add(clean);
                 }
-            });
-        }
+            });        }
         
         const decoded = tryDecodeBase64(attrValue);
         if (decoded) {
@@ -491,8 +390,7 @@ function extractAllVlessFromHtml(html) {
                         });
                     }
                 }
-            });
-        }
+            });        }
     }
     
     const b64Regex = /["']([A-Za-z0-9+/=]{100,})["']/g;
@@ -541,8 +439,7 @@ function tryDecodeBase64(str) {
         
         if (nonPrintable / Math.min(decoded.length, 100) > 0.3) {
             return null;
-        }
-        
+        }        
         return decoded;
     } catch (e) {
         return null;
@@ -591,8 +488,7 @@ function extractSubscriptionUrlFromHtml(html) {
 function handleFile(file) {
     updateDebug('file', {
         name: file.name,
-        size: file.size + ' байт',
-        type: file.type || 'неизвестен'
+        size: file.size + ' байт',        type: file.type || 'неизвестен'
     });
     
     const reader = new FileReader();
@@ -641,8 +537,7 @@ async function processSubscriptionContent(content) {
         if (content.includes('vless://')) {
             decoded = content;
             decodeMethod = 'plain text (vless:// найден)';
-        }
-        
+        }        
         if (!decoded) {
             try {
                 const cleaned = content.replace(/\s/g, '');
@@ -691,8 +586,7 @@ async function processSubscriptionContent(content) {
                 const binary = atob(b64);
                 const bytes = new Uint8Array(binary.length);
                 for (let i = 0; i < binary.length; i++) {
-                    bytes[i] = binary.charCodeAt(i);
-                }
+                    bytes[i] = binary.charCodeAt(i);                }
                 
                 if (bytes[0] === 0x1f && bytes[1] === 0x8b) {
                     const ds = new DecompressionStream('gzip');
@@ -741,8 +635,7 @@ async function processSubscriptionContent(content) {
             } else {
                 setStatus('err', '[ ERROR ] не найдено vless://');
             }
-            updateDebug('extract', { error: 'vless:// не найдены', found_protocols: protocols.join(', ') || 'нет' });
-            return;
+            updateDebug('extract', { error: 'vless:// не найдены', found_protocols: protocols.join(', ') || 'нет' });            return;
         }
         
         updateDebug('extract', { found: vlessLinks.length + ' ссылок vless://' });
@@ -791,8 +684,7 @@ function extractSubscriptionUrlFromJson(text) {
                 if (link && link.url) return link.url;
             }
         }
-        
-        if (response.ssConfLinks && typeof response.ssConfLinks === 'object') {
+                if (response.ssConfLinks && typeof response.ssConfLinks === 'object') {
             const values = Object.values(response.ssConfLinks);
             for (const val of values) {
                 if (typeof val === 'string' && val.startsWith('http')) return val;
@@ -841,8 +733,7 @@ function extractVlessLinks(text) {
     
     if (matches) {
         matches.forEach(link => {
-            const cleanLink = link.replace(/[)\],;'"]+$/, '').trim();
-            if (cleanLink.startsWith('vless://') && cleanLink.length > 10) {
+            const cleanLink = link.replace(/[)\],;'"]+$/, '').trim();            if (cleanLink.startsWith('vless://') && cleanLink.length > 10) {
                 links.push(cleanLink);
             }
         });
@@ -891,8 +782,7 @@ function convert() {
 function convertKoala() {
     console.log('[KOALA] Начало конвертации');
     
-    const input = document.getElementById('koala-input');
-    if (!input) {
+    const input = document.getElementById('koala-input');    if (!input) {
         console.error('[KOALA] Элемент koala-input не найден!');
         setStatus('err', '[ ERROR ] поле ввода Koala не найдено');
         return;
@@ -941,8 +831,7 @@ function convertHapp() {
     
     const input = document.getElementById('happ-input');
     if (!input) {
-        console.error('[HAPP] Элемент happ-input не найден!');
-        setStatus('err', '[ ERROR ] поле ввода Happ не найдено');
+        console.error('[HAPP] Элемент happ-input не найден!');        setStatus('err', '[ ERROR ] поле ввода Happ не найдено');
         return;
     }
     
@@ -991,8 +880,7 @@ function renderResults(results) {
         const itemDiv = document.createElement('div');
         itemDiv.className = 'result-item';
         itemDiv.innerHTML = `
-            <div class="result-item-header">
-                <div class="result-item-name">${escapeHtml(item.name)}</div>
+            <div class="result-item-header">                <div class="result-item-name">${escapeHtml(item.name)}</div>
                 <button class="copy-item-btn" data-copy-index="${index}" onclick="copyItem(${index})">[ Copy ]</button>
             </div>
             <textarea class="result-item-link" readonly>${escapeHtml(item.link)}</textarea>
@@ -1041,8 +929,7 @@ function copyItem(index) {
                 btn.classList.remove('copied');
             }, 2000);
         }
-    });
-}
+    });}
 
 function copyAll() {
     if (currentResults.length === 0) return;
@@ -1091,8 +978,7 @@ function clearAll() {
 // ==================== HAPP JSON ====================
 
 function jsonToVlessArray(configJson) {
-    let config = typeof configJson === 'string' ? JSON.parse(configJson) : configJson;
-    const results = [];
+    let config = typeof configJson === 'string' ? JSON.parse(configJson) : configJson;    const results = [];
     for (const outbound of config.outbounds || []) {
         if (outbound.protocol === 'vless') {
             try {
@@ -1141,8 +1027,7 @@ function buildVlessFromOutbound(vlessOutbound, remarks) {
         if (wsSettings.headers && wsSettings.headers.Host) params['host'] = wsSettings.headers.Host;
     }
     
-    if (user.flow) params['flow'] = user.flow;
-    
+    if (user.flow) params['flow'] = user.flow;    
     if (security === 'reality') {
         const reality = streamSettings.realitySettings || {};
         if (reality.serverName) params['sni'] = reality.serverName;
@@ -1191,8 +1076,7 @@ function parseKoalaConfig(text) {
         
         if (trimmed === 'proxies:') { inProxies = true; continue; }
         if (!inProxies) continue;
-        
-        if (trimmed.startsWith('- ')) {
+                if (trimmed.startsWith('- ')) {
             if (currentProxy) config.proxies.push(currentProxy);
             currentProxy = {};
             currentKey = null;
@@ -1241,8 +1125,7 @@ function parseYamlValue(valueStr) {
     if (!valueStr) return '';
     if ((valueStr.startsWith("'") && valueStr.endsWith("'")) || (valueStr.startsWith('"') && valueStr.endsWith('"'))) {
         return valueStr.slice(1, -1);
-    }
-    if (valueStr === 'true') return true;
+    }    if (valueStr === 'true') return true;
     if (valueStr === 'false') return false;
     if (/^\d+$/.test(valueStr)) return parseInt(valueStr, 10);
     if (/^\d+\.\d+$/.test(valueStr)) return parseFloat(valueStr);
@@ -1291,8 +1174,7 @@ function buildVlessFromKoalaProxy(vlessProxy) {
     }
     
     if (vlessProxy.reality === true || vlessProxy.reality === 'true') {
-        params['security'] = 'reality';
-        if (vlessProxy.servername) params['sni'] = vlessProxy.servername;
+        params['security'] = 'reality';        if (vlessProxy.servername) params['sni'] = vlessProxy.servername;
         else if (vlessProxy.sni) params['sni'] = vlessProxy.sni;
         if (vlessProxy.fp) params['fp'] = vlessProxy.fp;
         else if (vlessProxy.fingerprint) params['fp'] = vlessProxy.fingerprint;
@@ -1335,27 +1217,18 @@ function showExtractedUrlModal(subUrl, originalContent) {
                 <div class="success-icon">✅</div>
                 <div class="success-title">Панель управления распознана</div>
                 <div class="success-text">
-                    Найдена прямая ссылка на подписку. Используйте её со своим Worker (Happ-эмуляция).
+                    Найдена прямая ссылка на подписку. Вставьте её в основное поле URL и нажмите [ 📥 Загрузить ].
                 </div>
                 
                 <div class="extracted-url-block">
                     <div class="extracted-url-label">Прямая ссылка на подписку:</div>
                     <div class="extracted-url-value" id="extracted-url-value">${escapeHtml(subUrl)}</div>
-                    <div class="extracted-url-actions">
-                        <button class="btn btn-blue" onclick="copyExtractedUrl()" id="copy-extracted-btn">
+                    <div class="extracted-url-actions">                        <button class="btn btn-blue" onclick="copyExtractedUrl()" id="copy-extracted-btn">
                             [ 📋 Скопировать ]
                         </button>
                         <button class="btn btn-ghost" onclick="useExtractedUrl()">
                             [ ⚡ Использовать ]
                         </button>
-                    </div>
-                </div>
-                
-                <div class="manual-alt" style="margin-top:20px;">
-                    <div class="manual-alt-title">💡 Важно</div>
-                    <div class="manual-alt-text">
-                        Для загрузки этой ссылки нужен <b>свой Worker</b> с Happ-эмуляцией.<br>
-                        Выберите в прокси <b>"🚀 Свой прокси (Happ-эмуляция)"</b> и вставьте URL Worker.
                     </div>
                 </div>
                 
@@ -1399,7 +1272,6 @@ function copyExtractedUrl() {
         }
     });
 }
-
 function useExtractedUrl() {
     const urlEl = document.getElementById('extracted-url-value');
     if (!urlEl) return;
@@ -1410,70 +1282,14 @@ function useExtractedUrl() {
     document.getElementById('subscription-url').value = url;
     document.getElementById('subscription-raw').value = '';
     
-    setStatus('ok', `[ OK ] ссылка вставлена`);
+    setStatus('ok', `[ OK ] ссылка вставлена, загружаю...`);
+    
+    loadSubscription();
 }
 
 function closeManualModal() {
     const modal = document.getElementById('manual-modal');
     if (modal) modal.remove();
-}
-
-function showManualFallback(url, lastError) {
-    setStatus('err', '[ ERROR ] все прокси недоступны');
-    
-    updateDebug('all_proxies_failed', {
-        last_error: lastError?.message || 'неизвестно',
-        hint: 'Публичные CORS прокси недоступны. Используйте ручной способ или свой Worker.'
-    });
-    
-    const panel = document.getElementById('debug-panel');
-    const text = document.getElementById('debug-toggle-text');
-    if (panel) {
-        panel.style.display = 'block';
-        text.textContent = '▼ Скрыть диагностику';
-    }
-    
-    const oldModal = document.getElementById('manual-modal');
-    if (oldModal) oldModal.remove();
-    
-    const modal = document.createElement('div');
-    modal.id = 'manual-modal';
-    modal.className = 'manual-modal-overlay';
-    modal.innerHTML = `
-        <div class="manual-modal-box">
-            <div class="manual-modal-topbar">
-                <div class="dot red"></div>
-                <div class="dot yellow"></div>
-                <div class="dot green"></div>
-                <span class="manual-modal-title">// CORS прокси недоступны</span>
-                <button class="manual-modal-close" onclick="closeManualModal()">✕</button>
-            </div>
-            <div class="manual-modal-body">
-                <div class="success-icon" style="color:#f59e0b;">⚠️</div>
-                <div class="success-title" style="color:#f59e0b;">Прокси не работают</div>
-                <div class="success-text">
-                    Публичные CORS прокси сейчас недоступны или блокируются.
-                </div>
-                
-                <div class="manual-alt" style="margin-top:20px;">
-                    <div class="manual-alt-title">💡 Решение</div>
-                    <div class="manual-alt-text">
-                        <b>Вариант 1:</b> Создайте свой Worker на Cloudflare (бесплатно, 2 минуты)<br>
-                        → Выберите "🚀 Свой прокси (Happ-эмуляция)"<br><br>
-                        <b>Вариант 2:</b> Вставьте содержимое подписки вручную<br>
-                        → Откройте URL в новой вкладке, скопируйте содержимое<br>
-                        → Вставьте в поле "Содержимое подписки"
-                    </div>
-                </div>
-                
-                <button class="btn btn-ghost" onclick="closeManualModal()" style="margin-top:16px;width:100%;">
-                    [ Закрыть ]
-                </button>
-            </div>
-        </div>
-    `;
-    
-    document.body.appendChild(modal);
 }
 
 function showNoVlessModal(html) {
@@ -1501,13 +1317,12 @@ function showNoVlessModal(html) {
                 </div>
                 
                 <div class="manual-alt" style="margin-top:20px;">
-                    <div class="manual-alt-title">💡 Решение</div>
+                    <div class="manual-alt-title">💡 Что делать</div>
                     <div class="manual-alt-text">
-                        Нужен <b>свой Worker</b> на Cloudflare, который притворится Happ.<br><br>
-                        1. Создайте Worker (2 минуты, бесплатно)<br>
-                        2. Вставьте URL Worker в поле "URL вашего Worker"<br>
-                        3. Выберите "🚀 Свой прокси (Happ-эмуляция)"<br>
-                        4. Нажмите [ 📥 Загрузить ]
+                        1. Откройте ваш личный кабинет провайдера в браузере<br>
+                        2. Найдите раздел "Подписка" или "Ключи подключения"<br>
+                        3. Скопируйте <b>прямую ссылку подписки</b><br>                        4. Вставьте её в основное поле URL<br>
+                        5. Нажмите <b>[ 📥 Загрузить ]</b>
                     </div>
                 </div>
                 
