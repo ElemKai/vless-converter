@@ -47,35 +47,8 @@
                     <div class="subscription-input-group">
                         <input type="text" id="subscription-url" class="subscription-url-input" 
                                placeholder="https://sub.example.com/your-subscription-key">
-                        <button class="btn btn-blue subscription-load-btn" onclick="loadSubscription()">[ Загрузить ]</button>
-                    </div>
-                    
-                    <div class="subscription-options">
-                        <div class="option-group">
-                            <label>CORS прокси</label>
-                            <select id="cors-proxy" class="proxy-select">
-                                <option value="auto">🔄 Авто (пробовать все по очереди)</option>
-                                <option value="custom">🚀 Свой прокси (Happ-эмуляция)</option>
-                                <option value="corsproxy.io">corsproxy.io</option>
-                                <option value="allorigins.win">allorigins.win</option>
-                                <option value="cors.eu.org">cors.eu.org</option>
-                                <option value="codetabs.com">codetabs.com</option>
-                                <option value="none">Без прокси</option>
-                            </select>
-                        </div>
-                    </div>
-                    
-                    <div id="custom-proxy-block" class="custom-proxy-block" style="display:none;">
-                        <label>URL вашего Worker</label>
-                        <input type="text" id="custom-proxy-url" class="subscription-url-input" 
-                               placeholder="https://vless-proxy.kaibreofficial.workers.dev">
-                        <div class="custom-proxy-hint">
-                            💡 Создайте бесплатный Worker за 2 минуты на 
-                            <a href="https://dash.cloudflare.com/" target="_blank">dash.cloudflare.com</a>
-                        </div>
-                    </div>
+                        <button class="btn btn-blue subscription-load-btn" onclick="loadSubscription()">[ 📥 Загрузить ]</button>                    </div>
                 </div>
-                <!-- ✅ КОНЕЦ Способа 1 -->
 
                 <div class="subscription-divider"><span>или</span></div>
 
@@ -102,7 +75,6 @@
                         </div>
                     </div>
                 </div>
-                <!-- ✅ КОНЕЦ Способа 2 -->
 
                 <div class="subscription-divider"><span>или</span></div>
 
@@ -117,22 +89,19 @@
                     <textarea id="subscription-raw" placeholder="Вставьте сюда содержимое подписки...&#10;&#10;Поддерживаются форматы:&#10;• Base64 (стандартный и URL-safe)&#10;• Gzip + Base64&#10;• Простой текст со ссылками vless://&#10;• JSON с массивом прокси"></textarea>
                     
                     <div class="convert-row">
-                        <button class="btn btn-blue" onclick="parseSubscriptionManual()">[ Обработать содержимое ]</button>
+                        <button class="btn btn-blue" onclick="parseSubscriptionManual()">[ ⚡ Обработать содержимое ]</button>
                     </div>
                 </div>
-                <!-- ✅ КОНЕЦ Способа 3 -->
 
                 <!-- Диагностика -->
                 <div class="debug-toggle" onclick="toggleDebug()">
                     <span id="debug-toggle-text">▶ Показать диагностику</span>
-                </div>
-                <div class="debug-panel" id="debug-panel" style="display:none;">
+                </div>                <div class="debug-panel" id="debug-panel" style="display:none;">
                     <div class="debug-title">// Диагностика</div>
                     <div id="debug-content" class="debug-content">Нет данных</div>
                 </div>
 
             </div>
-            <!-- ✅ КОНЕЦ вкладки Подписка -->
 
             <!-- ==================== KOALA CLASH ==================== -->
             <div id="koala" class="tab-content">
@@ -148,7 +117,7 @@
 
             <!-- Кнопка конвертации (скрыта по умолчанию для вкладки Подписка) -->
             <div class="convert-row" id="main-convert-row" style="display:none;">
-                <button class="btn btn-blue" onclick="convert()">[ Конвертировать ]</button>
+                <button class="btn btn-blue" onclick="convert()">[ ⚡ Конвертировать ]</button>
             </div>
             
             <div class="status-bar" id="statusBar">
@@ -168,16 +137,15 @@
             <div class="result-header">
                 <div class="result-count" id="result-count">Найдено: 0 ссылок</div>
                 <div class="btn-row result-actions">
-                    <button class="btn btn-ghost" onclick="copyAll()">[ Копировать все ]</button>
-                    <button class="btn btn-ghost" onclick="downloadAll()">[ Скачать ]</button>
+                    <button class="btn btn-ghost" onclick="copyAll()">[ 📋 Копировать все ]</button>
+                    <button class="btn btn-ghost" onclick="downloadAll()">[ 💾 Скачать ]</button>
                 </div>
             </div>
             <div id="results-list" class="results-list"></div>
             <div class="btn-row">
-                <button class="btn btn-ghost" onclick="clearAll()">[ Очистить ]</button>
+                <button class="btn btn-ghost" onclick="clearAll()">[ 🗑️ Очистить ]</button>
             </div>
-        </div>
-    </div>
+        </div>    </div>
 
     <div id="footer-placeholder"></div>
 </div>
