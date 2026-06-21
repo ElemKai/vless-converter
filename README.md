@@ -7,83 +7,82 @@
 
 ## Возможности
 
-| Раздел | Описание |
-|--------|----------|
-| **Конвертер** (`/#converter`) | Извлечение VLESS-ссылок из подписок (URL, файл, JSON, YAML, base64, gzip, HTML панелей) |
-| **Чекер** (`/#checker`) | Проверка доступности VLESS-серверов с пингом, статистикой и экспортом |
-| **Блог** (`/#blog`) | Заметки и наблюдения с Markdown-постами через админ-панель |
-| **Админ-панель** (`/#admin`) | IP-геолокация, тест скорости (SVG-спидометр), SSH-терминал (xterm.js), управление клиентами OpenWRT, редактор блога |
+| Раздел | Ссылка | Описание |
+|--------|--------|----------|
+| **Конвертер** | `/#converter` | Извлечение VLESS из подписок (URL, файл, YAML, JSON, base64) |
+| **Чекер** | `/#checker` | Проверка доступности VLESS-серверов с пингом и статистикой |
+| **Блог** | `/#blog` | Markdown-посты с админ-панели |
+| **Админ-панель** | `/#admin` | 3 SSH-терминала, IP-инструменты, тест скорости, клиенты, редактор блога |
 
 ---
 
-## Как это работает
+## 🖥️ Терминал OpenWRT (ttyd) — самый простой способ с телефона
 
-SPA с хеш-роутингом — все страницы в одном `index.html`, навигация через `/#page`.  
-Данные конвертера обрабатываются локально в браузере — ничего не отправляется на сервер.
+В админ-панели есть вкладка **OpenWRT (ttyd)** — открывает терминал роутера прямо на сайте.
 
-Для блога и SSH используется Deno Deploy Worker (`api/main.ts`):
-- Blog API: CRUD постов, GitHub OAuth авторизация
-- SSH: WebSocket-прокси до сервера
-- Speed test: Cloudflare-эндпоинты
-
----
-
-## Бэкенд
-
-`api/main.ts` — единый Deno Deploy Worker, объединяет:
-
-- **SSH WebSocket прокси** — подключение к любому SSH-серверу через браузер
-- **HTTP subscription proxy** — загрузка подписок через сервер (обходит CORS)
-- **Blog API** — `/api/posts` (CRUD), `/api/me` (профиль)
-- **GitHub OAuth** — `/auth/github/login`, `/auth/github/callback` для авторизации админов
-- **JWT** — токены для защиты blog API
-
-Переменные окружения (Deno Deploy):
-- `GITHUB_CLIENT_ID` — ID GitHub OAuth App
-- `GITHUB_CLIENT_SECRET` — секрет GitHub OAuth App
-- `JWT_SECRET` — секрет для подписи JWT
-- `ALLOWED_USERS` — список GitHub логинов через запятую
-
----
-
-## Технологии
-
-**Frontend**: HTML5, CSS3, Vanilla JS (SPA с хеш-роутингом)  
-**Терминал**: [xterm.js](https://xtermjs.org/)  
-**Бэкенд**: [Deno Deploy](https://deno.com/deploy) (TypeScript)  
-**Хостинг**: GitHub Pages / custom domain  
-**Аутентификация**: GitHub OAuth + JWT
-
----
-
-## Локальный запуск
+### Установка ttyd на OpenWRT
 
 ```bash
-# Просто открой index.html в браузере
-# Или через HTTP-сервер (рекомендуется для blog API / OAuth):
-python -m http.server 5500
+# Подключись к роутеру по SSH
+ssh root@192.168.2.1
+
+# Установи ttyd
+opkg update
+opkg install ttyd
+
+# Запусти (вручную или добавь в /etc/rc.local):
+ttyd -p 7681 login
+
+# Для автозапуска при загрузке:
+cat > /etc/init.d/ttyd-custom << 'EOF'
+#!/bin/sh /etc/rc.common
+START=99
+start() {
+    /usr/bin/ttyd -p 7681 login
+}
+stop() {
+    killall ttyd
+}
+EOF
+chmod +x /etc/init.d/ttyd-custom
+/etc/init.d/ttyd-custom enable
+/etc/init.d/ttyd-custom start
 ```
 
-Для блога и SSH нужен запущенный Deno Deploy Worker.
+После установки:
+1. Открой сайт `/#admin`
+2. Перейди на вкладку **OpenWRT (ttyd)**
+3. Нажми **Открыть** — терминал появится в iframe
+
+Также доступно напрямую: **http://192.168.2.1:7681**
 
 ---
 
-## Структура
+## 💻 Локальный SSH (через WebSocket-прокси)
+
+Альтернативный способ для ПК через Python-прокси:
+
+```bash
+pip install websockets asyncssh
+python ssh-proxy.py
+```
+
+В админке на вкладке **Локальный SSH** укажи `ws://127.0.0.1:8888` и подключись.
+
+---
+
+## Файлы
 
 ```
-index.html          — SPA entry point, шаблоны всех страниц
-style.css           — все стили (тёмная тема, анимации, адаптивность)
-app.js              — роутер, навигация, OAuth callback
-common.js           — общая конфигурация (BLOG_API_URL, SITE_CONFIG)
+index.html          — SPA entry point, шаблоны страниц
+style.css           — все стили (тёмная тема, анимации)
+app.js              — роутер, навигация
+common.js           — конфигурация, инициализация страниц
+admin.js            — админ-панель (SSH, ttyd, IP, speedtest, клиенты, блог)
 converter.js        — конвертер подписок
 checker.js          — чекер серверов
 blog.js             — блог (список постов)
-admin.js            — админ-панель (IP, speedtest, SSH, клиенты, редактор блога)
+ssh-proxy.py        — локальный WebSocket SSH-прокси (Python)
+terminal.html       — отдельная страница терминала
 api/main.ts         — Deno Deploy Worker (SSH, blog API, OAuth)
 ```
-
----
-
-## Лицензия
-
-MIT

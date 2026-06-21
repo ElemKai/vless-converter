@@ -1,1336 +1,183 @@
-// Глобальные переменные
-let currentResults = [];
-let currentTab = 'subscription';
-let lastDebugInfo = {};
-
-// 🚀 Ваш Worker (Happ-эмуляция) — используется всегда
-const CUSTOM_PROXY_URL = 'https://vless-proxy.kaibreofficial.workers.dev';
-
-// ==================== ИНИЦИАЛИЗАЦИЯ ====================
+let results = [];
 
 function initConverterTabs() {
-    console.log('[INIT] Инициализация вкладок');
-    
-    document.querySelectorAll('.tab-btn').forEach(btn => {
-        btn.addEventListener('click', function() {
-            const tabName = this.dataset.tab;
-            currentTab = tabName;
-            
-            console.log('[TAB] Клик на вкладку:', tabName, 'currentTab теперь:', currentTab);
-            
-            // Обновляем активную вкладку
-            document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
-            this.classList.add('active');
-            
-            // Показываем соответствующий контент
-            document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
-            const tabContent = document.getElementById(tabName);
-            if (tabContent) {
-                tabContent.classList.add('active');
-                console.log('[TAB] Контент показан:', tabName);
-            } else {
-                console.error('[TAB] Контент не найден для:', tabName);
-            }
-            
-            // Показываем/скрываем кнопку конвертации
-            const mainConvertRow = document.getElementById('main-convert-row');
-            if (mainConvertRow) {
-                if (tabName === 'subscription') {
-                    mainConvertRow.style.display = 'none';
-                } else {
-                    mainConvertRow.style.display = 'block';
-                }
-            }
-        });
-    });
-    
-    // Скрываем кнопку при загрузке (активна вкладка subscription)
-    const mainConvertRow = document.getElementById('main-convert-row');
-    if (mainConvertRow) {
-        mainConvertRow.style.display = 'none';    }
-    
-    console.log('[INIT] Вкладки инициализированы. currentTab:', currentTab);
+    document.querySelector('#subscription-file')?.addEventListener('change', handleFileSelect);
+    setupFileDropZone();
 }
-
-function initFileUpload() {
-    const dropZone = document.getElementById('file-drop-zone');
-    const fileInput = document.getElementById('subscription-file');
-    
-    if (!dropZone || !fileInput) return;
-    
-    dropZone.addEventListener('click', (e) => {
-        if (e.target.tagName !== 'INPUT' && !e.target.closest('.file-select-btn')) {
-            fileInput.click();
-        }
-    });
-    
-    fileInput.addEventListener('change', (e) => {
-        if (e.target.files.length > 0) {
-            handleFile(e.target.files[0]);
-        }
-    });
-    
-    ['dragenter', 'dragover'].forEach(event => {
-        dropZone.addEventListener(event, (e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            dropZone.classList.add('dragover');
-        });
-    });
-    
-    ['dragleave', 'drop'].forEach(event => {
-        dropZone.addEventListener(event, (e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            dropZone.classList.remove('dragover');
-        });
-    });
-    
-    dropZone.addEventListener('drop', (e) => {
-        const files = e.dataTransfer.files;
-        if (files.length > 0) {
-            handleFile(files[0]);
-        }
-    });
-}
-
-// ==================== СТАТУС И DEBUG ====================
-
-function setStatus(type, text) {
-    const sb = document.getElementById('statusBar');
-    if (!sb) return;
-    sb.className = 'status-bar ' + type;
-    document.getElementById('statusText').textContent = text;
-}
-
-function updateDebug(stage, data) {
-    lastDebugInfo[stage] = data;
-    renderDebug();
-}
-
-function renderDebug() {
-    const content = document.getElementById('debug-content');
-    if (!content) return;
-    
-    let html = '';
-    for (const [stage, data] of Object.entries(lastDebugInfo)) {
-        html += `<div class="debug-line"><span class="debug-key">[${stage}]</span></div>`;
-        if (typeof data === 'string') {
-            html += `<div class="debug-line" style="padding-left:12px;">${escapeHtml(data)}</div>`;
-        } else if (data && data.error) {
-            html += `<div class="debug-line debug-error" style="padding-left:12px;">❌ ${escapeHtml(data.error)}</div>`;
-        } else if (data && typeof data === 'object') {
-            for (const [key, value] of Object.entries(data)) {
-                const displayValue = typeof value === 'string' && value.length > 200 
-                    ? value.substring(0, 200) + '...' 
-                    : String(value);
-                html += `<div class="debug-line" style="padding-left:12px;"><span class="debug-key">${key}:</span> <span class="debug-value">${escapeHtml(displayValue)}</span></div>`;
-            }
-        }
-        html += `<div class="debug-line">&nbsp;</div>`;
-    }
-    
-    content.innerHTML = html || 'Нет данных';
-}
-
-function toggleDebug() {
-    const panel = document.getElementById('debug-panel');
-    const text = document.getElementById('debug-toggle-text');    if (panel.style.display === 'none') {
-        panel.style.display = 'block';
-        text.textContent = '▼ Скрыть диагностику';
-    } else {
-        panel.style.display = 'none';
-        text.textContent = '▶ Показать диагностику';
-    }
-}
-
-// ==================== ЗАГРУЗКА ПО URL ====================
-
-async function loadSubscription() {
-    const url = document.getElementById('subscription-url').value.trim();
-    if (!url) {
-        setStatus('err', '[ ERROR ] введите URL подписки');
-        return;
-    }
-    
-    if (!url.startsWith('http://') && !url.startsWith('https://')) {
-        setStatus('err', '[ ERROR ] URL должен начинаться с http:// или https://');
-        return;
-    }
-    
-    lastDebugInfo = {};
-    updateDebug('start', { url: url, proxy: 'custom (Worker)' });
-    
-    setStatus('', '[ INFO ] загрузка через Worker...');
-    updateDebug('custom_proxy', { url: CUSTOM_PROXY_URL, hint: 'Happ-эмуляция' });
-    
-    try {
-        const proxyUrl = `${CUSTOM_PROXY_URL}?url=${encodeURIComponent(url)}`;
-        
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 15000);
-        
-        const response = await fetch(proxyUrl, {
-            method: 'GET',
-            signal: controller.signal,
-            cache: 'no-cache'
-        });
-        
-        clearTimeout(timeoutId);
-        
-        if (!response.ok) {
-            throw new Error(`HTTP ${response.status}`);
-        }
-        
-        const content = await response.text();
-        
-        updateDebug('proxy_response', {            status: '✓ успех',
-            size: content.length + ' символов',
-            preview: content.substring(0, 150)
-        });
-        
-        // Проверяем, не HTML ли это
-        const trimmed = content.trim();
-        const isHtml = trimmed.startsWith('<!doctype') || 
-                       trimmed.startsWith('<html') || 
-                       trimmed.startsWith('<HTML') ||
-                       content.includes('<div id="root">');
-        
-        if (!isHtml) {
-            updateDebug('direct_subscription', {
-                type: 'не HTML — подписка',
-                size: content.length + ' символов'
-            });
-            
-            document.getElementById('subscription-raw').value = content;
-            await processSubscriptionContent(content);
-            return;
-        }
-        
-        // Ищем VLESS в HTML
-        const vlessLinks = extractAllVlessFromHtml(content);
-        
-        if (vlessLinks.length > 0) {
-            updateDebug('vless_in_html', { count: vlessLinks.length });
-            
-            document.getElementById('subscription-raw').value = content;
-            
-            const results = vlessLinks.map(link => {
-                const parsed = parseVlessLink(link);
-                return { name: parsed.name || 'VLESS Server', link: link };
-            });
-            
-            renderResults(results);
-            const timeStr = new Date().toLocaleTimeString('ru');
-            setStatus('ok', `[ OK ] извлечено ${results.length} VLESS — ${timeStr}`);
-            return;
-        }
-        
-        // Ищем subscriptionUrl в data-panel
-        const extractedSubUrl = extractSubscriptionUrlFromHtml(content);
-        
-        if (extractedSubUrl && extractedSubUrl !== url) {
-            updateDebug('panel_detected', {
-                type: 'Stun.su / V2board',
-                subscriptionUrl: extractedSubUrl
-            });            
-            setStatus('', `[ INFO ] загрузка подписки...`);
-            
-            try {
-                const subProxyUrl = `${CUSTOM_PROXY_URL}?url=${encodeURIComponent(extractedSubUrl)}`;
-                
-                const controller2 = new AbortController();
-                const timeoutId2 = setTimeout(() => controller2.abort(), 15000);
-                
-                const subResponse = await fetch(subProxyUrl, {
-                    method: 'GET',
-                    signal: controller2.signal,
-                    cache: 'no-cache'
-                });
-                
-                clearTimeout(timeoutId2);
-                
-                if (!subResponse.ok) {
-                    throw new Error(`HTTP ${subResponse.status}`);
-                }
-                
-                const subContent = await subResponse.text();
-                
-                updateDebug('subscription_response', {
-                    size: subContent.length + ' символов',
-                    preview: subContent.substring(0, 150)
-                });
-                
-                const subTrimmed = subContent.trim();
-                const subIsHtml = subTrimmed.startsWith('<!doctype') || 
-                                  subTrimmed.startsWith('<html') ||
-                                  subContent.includes('<div id="root">');
-                
-                if (!subIsHtml) {
-                    document.getElementById('subscription-raw').value = subContent;
-                    await processSubscriptionContent(subContent);
-                    return;
-                }
-                
-                const subVlessLinks = extractAllVlessFromHtml(subContent);
-                if (subVlessLinks.length > 0) {
-                    const results = subVlessLinks.map(link => {
-                        const parsed = parseVlessLink(link);
-                        return { name: parsed.name || 'VLESS Server', link: link };
-                    });
-                    renderResults(results);
-                    setStatus('ok', `[ OK ] извлечено ${results.length} VLESS`);
-                    return;
-                }
-                                showExtractedUrlModal(extractedSubUrl, subContent);
-                
-            } catch (error) {
-                updateDebug('subscription_error', { error: error.message });
-                showExtractedUrlModal(extractedSubUrl, content);
-            }
-        } else {
-            setStatus('err', '[ ERROR ] VLESS не найдены');
-            updateDebug('no_vless', {
-                hint: 'Сервер отдаёт только HTML-страницу.'
-            });
-            showNoVlessModal(content);
-        }
-        
-    } catch (error) {
-        setStatus('err', `[ ERROR ] ${error.message}`);
-        updateDebug('error', { error: error.message });
-    }
-}
-
-// ==================== УНИВЕРСАЛЬНЫЙ ПОИСК VLESS В HTML ====================
-
-function extractAllVlessFromHtml(html) {
-    const allLinks = new Set();
-    
-    const directMatches = html.match(/vless:\/\/[^\s<>"']+/gi);
-    if (directMatches) {
-        directMatches.forEach(link => {
-            const clean = link.replace(/[)\],;'"]+$/, '').trim();
-            if (clean.startsWith('vless://') && clean.length > 10) {
-                allLinks.add(clean);
-            }
-        });
-    }
-    
-    const dataAttrRegex = /data-([a-z\-]+)=["']([^"']+)["']/gi;
-    let match;
-    
-    while ((match = dataAttrRegex.exec(html)) !== null) {
-        const attrValue = match[2];
-        if (attrValue.length < 20) continue;
-        
-        const vlessInAttr = attrValue.match(/vless:\/\/[^\s<>"']+/gi);
-        if (vlessInAttr) {
-            vlessInAttr.forEach(link => {
-                const clean = link.replace(/[)\],;'"]+$/, '').trim();
-                if (clean.startsWith('vless://') && clean.length > 10) {
-                    allLinks.add(clean);
-                }
-            });        }
-        
-        const decoded = tryDecodeBase64(attrValue);
-        if (decoded) {
-            const vlessInDecoded = decoded.match(/vless:\/\/[^\s<>"']+/gi);
-            if (vlessInDecoded) {
-                vlessInDecoded.forEach(link => {
-                    const clean = link.replace(/[)\],;'"]+$/, '').trim();
-                    if (clean.startsWith('vless://') && clean.length > 10) {
-                        allLinks.add(clean);
-                    }
-                });
-            }
-        }
-    }
-    
-    const scriptRegex = /<script[^>]*>([\s\S]*?)<\/script>/gi;
-    let scriptMatch;
-    
-    while ((scriptMatch = scriptRegex.exec(html)) !== null) {
-        const scriptContent = scriptMatch[1];
-        if (!scriptContent || scriptContent.length < 50) continue;
-        
-        const vlessInScript = scriptContent.match(/vless:\/\/[^\s<>"']+/gi);
-        if (vlessInScript) {
-            vlessInScript.forEach(link => {
-                const clean = link.replace(/[)\],;'"]+$/, '').trim();
-                if (clean.startsWith('vless://') && clean.length > 10) {
-                    allLinks.add(clean);
-                }
-            });
-        }
-        
-        const b64Matches = scriptContent.match(/["']([A-Za-z0-9+/=]{50,})["']/g);
-        if (b64Matches) {
-            b64Matches.forEach(b64Str => {
-                const clean = b64Str.replace(/["']/g, '');
-                const decoded = tryDecodeBase64(clean);
-                if (decoded) {
-                    const vlessInB64 = decoded.match(/vless:\/\/[^\s<>"']+/gi);
-                    if (vlessInB64) {
-                        vlessInB64.forEach(link => {
-                            const cleanLink = link.replace(/[)\],;'"]+$/, '').trim();
-                            if (cleanLink.startsWith('vless://') && cleanLink.length > 10) {
-                                allLinks.add(cleanLink);
-                            }
-                        });
-                    }
-                }
-            });        }
-    }
-    
-    const b64Regex = /["']([A-Za-z0-9+/=]{100,})["']/g;
-    let b64Match;
-    
-    while ((b64Match = b64Regex.exec(html)) !== null) {
-        const b64Str = b64Match[1];
-        const decoded = tryDecodeBase64(b64Str);
-        if (decoded) {
-            const vlessInDecoded = decoded.match(/vless:\/\/[^\s<>"']+/gi);
-            if (vlessInDecoded) {
-                vlessInDecoded.forEach(link => {
-                    const clean = link.replace(/[)\],;'"]+$/, '').trim();
-                    if (clean.startsWith('vless://') && clean.length > 10) {
-                        allLinks.add(clean);
-                    }
-                });
-            }
-        }
-    }
-    
-    return [...allLinks];
-}
-
-function tryDecodeBase64(str) {
-    if (!str || str.length < 20) return null;
-    
-    let cleaned = str.replace(/\s/g, '');
-    
-    if (!/^[A-Za-z0-9+\/=_-]+$/.test(cleaned)) return null;
-    
-    cleaned = cleaned.replace(/-/g, '+').replace(/_/g, '/');
-    const pad = cleaned.length % 4;
-    if (pad) cleaned += '='.repeat(4 - pad);
-    
-    try {
-        const decoded = atob(cleaned);
-        
-        let nonPrintable = 0;
-        for (let i = 0; i < Math.min(decoded.length, 100); i++) {
-            const code = decoded.charCodeAt(i);
-            if (code < 32 && code !== 9 && code !== 10 && code !== 13) {
-                nonPrintable++;
-            }
-        }
-        
-        if (nonPrintable / Math.min(decoded.length, 100) > 0.3) {
-            return null;
-        }        
-        return decoded;
-    } catch (e) {
-        return null;
-    }
-}
-
-function extractSubscriptionUrlFromHtml(html) {
-    try {
-        const match = html.match(/data-panel=["']([A-Za-z0-9+/=_-]+)["']/i);
-        if (!match) return null;
-        
-        let b64 = match[1].replace(/-/g, '+').replace(/_/g, '/');
-        const pad = b64.length % 4;
-        if (pad) b64 += '='.repeat(4 - pad);
-        
-        const jsonStr = atob(b64);
-        const data = JSON.parse(jsonStr);
-        
-        const response = data.response || data;
-        
-        if (response.subscriptionUrl) {
-            return response.subscriptionUrl;
-        }
-        
-        if (Array.isArray(response.links) && response.links.length > 0) {
-            for (const link of response.links) {
-                if (typeof link === 'string') return link;
-                if (link && link.url) return link.url;
-            }
-        }
-        
-        if (response.ssConfLinks && typeof response.ssConfLinks === 'object') {
-            const values = Object.values(response.ssConfLinks);
-            if (values.length > 0) return values[0];
-        }
-        
-        return null;
-        
-    } catch (e) {
-        return null;
-    }
-}
-
-// ==================== ЗАГРУЗКА ФАЙЛА ====================
-
-function handleFile(file) {
-    updateDebug('file', {
-        name: file.name,
-        size: file.size + ' байт',        type: file.type || 'неизвестен'
-    });
-    
+function handleFileSelect(e) {
+    const file = e.target.files[0];
+    if (!file) return;
+    setStatus('statusBar', 'Чтение файла...', 'ok');
     const reader = new FileReader();
-    
-    reader.onload = async (e) => {
-        const content = e.target.result;
-        document.getElementById('subscription-raw').value = content;
-        
-        setStatus('ok', `[ OK ] файл загружен: ${file.name} (${content.length} символов)`);
-        
-        updateDebug('file_loaded', {
-            size: content.length + ' символов',
-            preview: content.substring(0, 150)
-        });
-        
-        await processSubscriptionContent(content);
+    reader.onload = ev => {
+        document.getElementById('subscription-raw').value = ev.target.result;
+        setStatus('statusBar', 'Файл загружен. Нажмите Обработать.', 'ok');
     };
-    
-    reader.onerror = () => {
-        setStatus('err', '[ ERROR ] не удалось прочитать файл');
-        updateDebug('file_error', { error: 'ошибка чтения' });
-    };
-    
-    reader.readAsText(file, 'utf-8');
+    reader.readAsText(file);
 }
-
-// ==================== РУЧНАЯ ВСТАВКА ====================
-
-async function parseSubscriptionManual() {
-    const content = document.getElementById('subscription-raw').value.trim();
-    if (!content) {
-        setStatus('err', '[ ERROR ] вставьте содержимое подписки');
-        return;
-    }
-    updateDebug('manual', { size: content.length + ' символов' });
-    await processSubscriptionContent(content);
-}
-
-// ==================== ОБРАБОТКА СОДЕРЖИМОГО ====================
-
-async function processSubscriptionContent(content) {
-    try {
-        let decoded = null;
-        let decodeMethod = 'none';
-        
-        if (content.includes('vless://')) {
-            decoded = content;
-            decodeMethod = 'plain text (vless:// найден)';
-        }        
-        if (!decoded) {
-            try {
-                const cleaned = content.replace(/\s/g, '');
-                if (/^[A-Za-z0-9+\/=]+$/.test(cleaned) && cleaned.length > 20) {
-                    const result = atob(cleaned);
-                    if (looksLikeSubscription(result)) {
-                        decoded = result;
-                        decodeMethod = 'base64 (стандартный)';
-                    } else if (looksLikePanelJson(result)) {
-                        decoded = result;
-                        decodeMethod = 'base64 (JSON панели)';
-                    }
-                }
-            } catch (e) {}
-        }
-        
-        if (!decoded) {
-            try {
-                const cleaned = content.replace(/\s/g, '')
-                    .replace(/-/g, '+')
-                    .replace(/_/g, '/');
-                const pad = cleaned.length % 4;
-                const padded = pad ? cleaned + '='.repeat(4 - pad) : cleaned;
-                
-                if (/^[A-Za-z0-9+\/=]+$/.test(padded) && padded.length > 20) {
-                    const result = atob(padded);
-                    if (looksLikeSubscription(result)) {
-                        decoded = result;
-                        decodeMethod = 'base64 (URL-safe)';
-                    } else if (looksLikePanelJson(result)) {
-                        decoded = result;
-                        decodeMethod = 'base64 URL-safe (JSON панели)';
-                    }
-                }
-            } catch (e) {}
-        }
-        
-        if (!decoded && typeof DecompressionStream !== 'undefined') {
-            try {
-                const cleaned = content.replace(/\s/g, '')
-                    .replace(/-/g, '+')
-                    .replace(/_/g, '/');
-                const pad = cleaned.length % 4;
-                const b64 = pad ? cleaned + '='.repeat(4 - pad) : cleaned;
-                
-                const binary = atob(b64);
-                const bytes = new Uint8Array(binary.length);
-                for (let i = 0; i < binary.length; i++) {
-                    bytes[i] = binary.charCodeAt(i);                }
-                
-                if (bytes[0] === 0x1f && bytes[1] === 0x8b) {
-                    const ds = new DecompressionStream('gzip');
-                    const blob = new Blob([bytes]);
-                    const stream = blob.stream().pipeThrough(ds);
-                    const decompressedBlob = await new Response(stream).blob();
-                    const result = await decompressedBlob.text();
-                    
-                    if (looksLikeSubscription(result)) {
-                        decoded = result;
-                        decodeMethod = 'gzip + base64';
-                    }
-                }
-            } catch (e) {}
-        }
-        
-        if (!decoded) {
-            decoded = content;
-            decodeMethod = 'использован как есть';
-        }
-        
-        updateDebug('decode', {
-            method: decodeMethod,
-            size: decoded.length + ' символов',
-            preview: decoded.substring(0, 200)
-        });
-        
-        const subUrl = extractSubscriptionUrlFromJson(decoded);
-        
-        if (subUrl) {
-            updateDebug('panel_json_found', {
-                subscriptionUrl: subUrl
-            });
-            
-            setStatus('ok', `[ OK ] найдена прямая ссылка подписки`);
-            showExtractedUrlModal(subUrl, decoded);
-            return;
-        }
-        
-        const vlessLinks = extractVlessLinks(decoded);
-        
-        if (vlessLinks.length === 0) {
-            const protocols = detectProtocols(decoded);
-            if (protocols.length > 0) {
-                setStatus('err', `[ ERROR ] VLESS не найдены. Найдены: ${protocols.join(', ')}`);
-            } else {
-                setStatus('err', '[ ERROR ] не найдено vless://');
-            }
-            updateDebug('extract', { error: 'vless:// не найдены', found_protocols: protocols.join(', ') || 'нет' });            return;
-        }
-        
-        updateDebug('extract', { found: vlessLinks.length + ' ссылок vless://' });
-        
-        const results = vlessLinks.map(link => {
-            const parsed = parseVlessLink(link);
-            return {
-                name: parsed.name || 'VLESS Server',
-                link: link
+function setupFileDropZone() {
+    const zone = document.getElementById('file-drop-zone');
+    if (!zone) return;
+    zone.addEventListener('dragover', e => { e.preventDefault(); zone.classList.add('dragover'); });
+    zone.addEventListener('dragleave', () => zone.classList.remove('dragover'));
+    zone.addEventListener('drop', e => {
+        e.preventDefault();
+        zone.classList.remove('dragover');
+        const file = e.dataTransfer.files[0];
+        if (file) {
+            const reader = new FileReader();
+            reader.onload = ev => {
+                document.getElementById('subscription-raw').value = ev.target.result;
+                setStatus('statusBar', 'Файл загружен.', 'ok');
             };
-        });
-        
-        renderResults(results);
-        const timeStr = new Date().toLocaleTimeString('ru');
-        setStatus('ok', `[ OK ] извлечено ${results.length} VLESS (${decodeMethod}) — ${timeStr}`);
-        
-    } catch (e) {
-        setStatus('err', '[ ERROR ] ' + e.message);
-        updateDebug('error', { error: e.message });
-    }
-}
-
-function looksLikePanelJson(text) {
-    if (!text) return false;
-    try {
-        const json = JSON.parse(text);
-        const response = json.response || json;
-        return !!(response.subscriptionUrl || 
-                  (Array.isArray(response.links) && response.links.length > 0) ||
-                  response.ssConfLinks);
-    } catch (e) {
-        return false;
-    }
-}
-
-function extractSubscriptionUrlFromJson(text) {
-    try {
-        const json = JSON.parse(text);
-        const response = json.response || json;
-        
-        if (response.subscriptionUrl) return response.subscriptionUrl;
-        
-        if (Array.isArray(response.links) && response.links.length > 0) {
-            for (const link of response.links) {
-                if (typeof link === 'string' && link.startsWith('http')) return link;
-                if (link && link.url) return link.url;
-            }
+            reader.readAsText(file);
         }
-                if (response.ssConfLinks && typeof response.ssConfLinks === 'object') {
-            const values = Object.values(response.ssConfLinks);
-            for (const val of values) {
-                if (typeof val === 'string' && val.startsWith('http')) return val;
-            }
-        }
-        
-        return null;
-    } catch (e) {
-        return null;
-    }
+    });
 }
-
-function looksLikeSubscription(text) {
-    if (!text) return false;
-    return text.includes('vless://') || 
-           text.includes('vmess://') || 
-           text.includes('trojan://') ||
-           text.includes('ss://') ||
-           text.includes('hysteria://') ||
-           text.includes('tuic://');
+function loadSubscription() {
+    const url = document.getElementById('subscription-url').value.trim();
+    if (!url) { setStatus('statusBar', 'Введите URL подписки', 'err'); return; }
+    setStatus('statusBar', 'Загрузка...', 'ok');
+    fetch(`https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`)
+        .then(r => r.ok ? r.text() : Promise.reject('HTTP ' + r.status))
+        .then(text => {
+            document.getElementById('subscription-raw').value = text;
+            setStatus('statusBar', 'Загружено. Нажмите Обработать.', 'ok');
+        })
+        .catch(() => setStatus('statusBar', 'Ошибка загрузки. Попробуйте вручную.', 'err'));
 }
-
-function detectProtocols(text) {
-    const protocols = [];
-    const checks = [
-        ['vless', 'vless://'],
-        ['vmess', 'vmess://'],
-        ['trojan', 'trojan://'],
-        ['ss', 'ss://'],
-        ['hysteria', 'hysteria://'],
-        ['hysteria2', 'hysteria2://'],
-        ['tuic', 'tuic://'],
-        ['wireguard', 'wireguard://'],
-        ['wg', 'wg://']
-    ];
-    for (const [name, pattern] of checks) {
-        if (text.includes(pattern)) protocols.push(name);
-    }
-    return protocols;
+function parseSubscriptionManual() {
+    const raw = document.getElementById('subscription-raw').value.trim();
+    if (!raw) { setStatus('statusBar', 'Нет данных', 'err'); return; }
+    setStatus('statusBar', 'Парсинг...', 'ok');
+    const links = extractVlessLinks(raw);
+    displayResults(links);
 }
-
+function convert() {
+    const koala = document.getElementById('koala-input')?.value.trim();
+    const happ = document.getElementById('happ-input')?.value.trim();
+    if (!koala && !happ) { setStatus('statusBar', 'Нет данных для конвертации', 'err'); return; }
+    setStatus('statusBar', 'Конвертация...', 'ok');
+    let links = [];
+    if (koala) links = links.concat(parseKoalaYaml(koala));
+    if (happ) links = links.concat(parseHappJson(happ));
+    displayResults(links);
+}
 function extractVlessLinks(text) {
     const links = [];
-    const regex = /vless:\/\/[^\s<>"']+/gi;
-    const matches = text.match(regex);
-    
-    if (matches) {
-        matches.forEach(link => {
-            const cleanLink = link.replace(/[)\],;'"]+$/, '').trim();            if (cleanLink.startsWith('vless://') && cleanLink.length > 10) {
-                links.push(cleanLink);
-            }
-        });
-    }
-    
-    return [...new Set(links)];
-}
-
-function parseVlessLink(url) {
-    try {
-        const withoutProto = url.replace(/^vless:\/\//, '');
-        const [main, fragment = ''] = withoutProto.split('#');
-        
-        let name = '';
-        if (fragment) {
-            try {
-                name = decodeURIComponent(fragment);
-            } catch (e) {
-                name = fragment;
-            }
-        }
-        
-        return { name: name };
-    } catch (e) {
-        return { name: '' };
-    }
-}
-
-// ==================== КОНВЕРТАЦИЯ ====================
-
-function convert() {
-    console.log('[CONVERT] Вызвана convert(), currentTab:', currentTab);
-    
-    if (currentTab === 'koala') {
-        console.log('[CONVERT] → convertKoala()');
-        convertKoala();
-    } else if (currentTab === 'happ') {
-        console.log('[CONVERT] → convertHapp()');
-        convertHapp();
-    } else {
-        console.warn('[CONVERT] Неизвестная вкладка:', currentTab);
-        setStatus('err', '[ ERROR ] выберите вкладку Koala Clash или Happ JSON');
-    }
-}
-
-function convertKoala() {
-    console.log('[KOALA] Начало конвертации');
-    
-    const input = document.getElementById('koala-input');    if (!input) {
-        console.error('[KOALA] Элемент koala-input не найден!');
-        setStatus('err', '[ ERROR ] поле ввода Koala не найдено');
-        return;
-    }
-    
-    const value = input.value.trim();
-    console.log('[KOALA] Длина ввода:', value.length, 'символов');
-    
-    if (!value) {
-        setStatus('err', '[ ERROR ] пустой ввод');
-        return;
-    }
-    
-    try {
-        let config;
-        
+    const vlessRe = /vless:\/\/[^\s<>"']+/g;
+    let m;
+    while ((m = vlessRe.exec(text)) !== null) links.push(m[0]);
+    if (links.length === 0) {
         try {
-            config = JSON.parse(value);
-            console.log('[KOALA] Распознан как JSON');
-        } catch (e) {
-            config = parseKoalaConfig(value);
-            console.log('[KOALA] Распознан как YAML, прокси:', config.proxies?.length);
-        }
-        
-        const results = koalaToVlessArray(config);
-        console.log('[KOALA] Результатов:', results.length);
-        
-        if (results.length === 0) {
-            setStatus('err', '[ ERROR ] не найдено VLESS прокси');
-            return;
-        }
-        
-        renderResults(results);
-        const timeStr = new Date().toLocaleTimeString('ru');
-        setStatus('ok', `[ OK ] конвертация выполнена (${results.length} шт.) — ${timeStr}`);
-        console.log('[KOALA] ✓ Успешно');
-        
-    } catch (e) {
-        console.error('[KOALA] Ошибка:', e);
-        setStatus('err', '[ ERROR ] ' + e.message);
+            const decoded = atob(text);
+            const m2 = decoded.match(vlessRe);
+            if (m2) links.push(...m2);
+        } catch {}
     }
+    if (links.length === 0) {
+        try {
+            const json = JSON.parse(text);
+            const extract = (obj) => {
+                if (!obj || typeof obj !== 'object') return;
+                if (obj.vless || obj.vmess) links.push(obj.vless || obj.vmess);
+                Object.values(obj).forEach(v => extract(v));
+            };
+            extract(json);
+        } catch {}
+    }
+    return links;
 }
-
-function convertHapp() {
-    console.log('[HAPP] Начало конвертации');
-    
-    const input = document.getElementById('happ-input');
-    if (!input) {
-        console.error('[HAPP] Элемент happ-input не найден!');        setStatus('err', '[ ERROR ] поле ввода Happ не найдено');
-        return;
-    }
-    
-    const value = input.value.trim();
-    console.log('[HAPP] Длина ввода:', value.length, 'символов');
-    
-    if (!value) {
-        setStatus('err', '[ ERROR ] пустой ввод');
-        return;
-    }
-    
+function parseKoalaYaml(text) {
+    const links = [];
+    const vlessRe = /vless:\/\/[^\s<>"']+/g;
+    const m = text.match(vlessRe);
+    if (m) links.push(...m);
+    return links;
+}
+function parseHappJson(text) {
+    const links = [];
     try {
-        const config = JSON.parse(value);
-        console.log('[HAPP] JSON распарсен');
-        
-        const results = jsonToVlessArray(config);
-        console.log('[HAPP] Результатов:', results.length);
-        
-        if (results.length === 0) {
-            setStatus('err', '[ ERROR ] не найдено VLESS outbound');
-            return;
-        }
-        
-        renderResults(results);
-        const timeStr = new Date().toLocaleTimeString('ru');
-        setStatus('ok', `[ OK ] конвертация выполнена (${results.length} шт.) — ${timeStr}`);
-        console.log('[HAPP] ✓ Успешно');
-        
-    } catch (e) {
-        console.error('[HAPP] Ошибка:', e);
-        setStatus('err', '[ ERROR ] ' + e.message);
+        const json = JSON.parse(text);
+        const walk = (obj) => {
+            if (!obj || typeof obj !== 'object') return;
+            if (obj.protocol === 'vless' && obj.settings?.vnext) {
+                obj.settings.vnext.forEach(vn => {
+                    (vn.users || []).forEach(u => {
+                        const p = obj.port || 443;
+                        const s = obj.streamSettings || {};
+                        const params = new URLSearchParams({
+                            type: s.network || 'tcp', security: obj.security || 'tls', flow: u.flow || '',
+                            fp: s.fingerprint || '', pbk: s.realitySettings?.publicKey || '',
+                            sid: s.realitySettings?.shortId || '',
+                            sni: s.realitySettings?.serverName || s.tlsSettings?.serverName || '',
+                        });
+                        const link = `vless://${u.id}@${vn.address}:${p}?${params}#${vn.address}`;
+                        links.push(link);
+                    });
+                });
+            }
+            Object.values(obj).forEach(v => walk(v));
+        };
+        walk(json);
+    } catch {}
+    return links;
+}
+function displayResults(linkList) {
+    results = linkList;
+    const section = document.getElementById('result-section');
+    const list = document.getElementById('results-list');
+    const count = document.getElementById('result-count');
+    if (!section || !list) return;
+    if (results.length === 0) {
+        setStatus('statusBar', 'VLESS-ссылки не найдены', 'err');
+        return;
     }
-}
-
-// ==================== РЕНДЕР ====================
-
-function renderResults(results) {
-    currentResults = results;
-    const listDiv = document.getElementById('results-list');
-    const countSpan = document.getElementById('result-count');
-    
-    countSpan.textContent = `Найдено: ${results.length} ссылок`;
-    listDiv.innerHTML = '';
-    
-    results.forEach((item, index) => {
-        const itemDiv = document.createElement('div');
-        itemDiv.className = 'result-item';
-        itemDiv.innerHTML = `
-            <div class="result-item-header">                <div class="result-item-name">${escapeHtml(item.name)}</div>
-                <button class="copy-item-btn" data-copy-index="${index}" onclick="copyItem(${index})">[ Copy ]</button>
+    setStatus('statusBar', `Найдено: ${results.length}`, 'ok');
+    section.style.display = 'block';
+    count.textContent = `Найдено: ${results.length} ссылок`;
+    list.innerHTML = results.map((link, i) => {
+        const name = link.split('#')[1] || `Server ${i + 1}`;
+        return `<div class="result-item">
+            <div class="result-item-header">
+                <span class="result-item-name">${escapeHtml(name)}</span>
+                <button class="copy-item-btn" onclick="copyItem(${i})">[ Копировать ]</button>
             </div>
-            <textarea class="result-item-link" readonly>${escapeHtml(item.link)}</textarea>
-        `;
-        listDiv.appendChild(itemDiv);
+            <textarea class="result-item-link" readonly>${escapeHtml(link)}</textarea>
+        </div>`;
+    }).join('');
+}
+function copyItem(i) {
+    if (results[i] === undefined) return;
+    navigator.clipboard.writeText(results[i]).then(() => {
+        const btn = document.querySelectorAll('.copy-item-btn')[i];
+        if (btn) { btn.textContent = '[ Скопировано ]'; setTimeout(() => btn.textContent = '[ Копировать ]', 2000); }
     });
-    
-    document.getElementById('result-section').style.display = 'block';
-    document.getElementById('result-section').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
 }
-
-function escapeHtml(text) {
-    const div = document.createElement('div');
-    div.textContent = text;
-    return div.innerHTML;
-}
-
-// ==================== ДЕЙСТВИЯ ====================
-
-function copyItem(index) {
-    const item = currentResults[index];
-    if (!item) return;
-    const btn = document.querySelector(`[data-copy-index="${index}"]`);
-    
-    navigator.clipboard.writeText(item.link).then(() => {
-        if (btn) {
-            btn.textContent = '[ Copied! ]';
-            btn.classList.add('copied');
-            setTimeout(() => {
-                btn.textContent = '[ Copy ]';
-                btn.classList.remove('copied');
-            }, 2000);
-        }
-    }).catch(() => {
-        const ta = document.createElement('textarea');
-        ta.value = item.link;
-        document.body.appendChild(ta);
-        ta.select();
-        document.execCommand('copy');
-        document.body.removeChild(ta);
-        if (btn) {
-            btn.textContent = '[ Copied! ]';
-            btn.classList.add('copied');
-            setTimeout(() => {
-                btn.textContent = '[ Copy ]';
-                btn.classList.remove('copied');
-            }, 2000);
-        }
-    });}
-
 function copyAll() {
-    if (currentResults.length === 0) return;
-    const allLinks = currentResults.map(r => r.link).join('\n');
-    navigator.clipboard.writeText(allLinks).then(() => {
-        setStatus('ok', `[ OK ] скопировано ${currentResults.length} ссылок`);
-    }).catch(() => {
-        const ta = document.createElement('textarea');
-        ta.value = allLinks;
-        document.body.appendChild(ta);
-        ta.select();
-        document.execCommand('copy');
-        document.body.removeChild(ta);
-        setStatus('ok', `[ OK ] скопировано ${currentResults.length} ссылок`);
-    });
+    navigator.clipboard.writeText(results.join('\n'));
+    const btn = document.querySelector('.result-actions .btn-ghost');
+    if (btn) { btn.textContent = '[ Скопировано ]'; setTimeout(() => btn.textContent = '[ Копировать все ]', 2000); }
 }
-
 function downloadAll() {
-    if (currentResults.length === 0) return;
-    const content = currentResults.map(r => r.link).join('\n');
-    const blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
-    const url = URL.createObjectURL(blob);
+    const blob = new Blob([results.join('\n')], { type: 'text/plain' });
     const a = document.createElement('a');
-    a.href = url;
-    a.download = 'vless_links.txt';
-    document.body.appendChild(a);
+    a.href = URL.createObjectURL(blob);
+    a.download = 'vless-links.txt';
     a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-    setStatus('ok', `[ OK ] файл скачан (${currentResults.length} ссылок)`);
 }
-
 function clearAll() {
-    document.getElementById('koala-input').value = '';
-    document.getElementById('happ-input').value = '';
-    document.getElementById('subscription-url').value = '';
-    document.getElementById('subscription-raw').value = '';
-    document.getElementById('results-list').innerHTML = '';
+    results = [];
     document.getElementById('result-section').style.display = 'none';
-    currentResults = [];
-    lastDebugInfo = {};
-    renderDebug();
-    setStatus('', 'ожидание ввода...');
-}
-
-// ==================== HAPP JSON ====================
-
-function jsonToVlessArray(configJson) {
-    let config = typeof configJson === 'string' ? JSON.parse(configJson) : configJson;    const results = [];
-    for (const outbound of config.outbounds || []) {
-        if (outbound.protocol === 'vless') {
-            try {
-                const link = buildVlessFromOutbound(outbound, config.remarks || '');
-                results.push({ name: config.remarks || outbound.tag || 'VLESS', link: link });
-            } catch (e) { console.warn('Ошибка outbound:', e); }
-        }
-    }
-    return results;
-}
-
-function buildVlessFromOutbound(vlessOutbound, remarks) {
-    const vnext = vlessOutbound.settings.vnext[0];
-    const user = vnext.users[0];
-    const uuid = user.id;
-    const address = vnext.address;
-    const port = vnext.port;
-    const streamSettings = vlessOutbound.streamSettings || {};
-    const network = streamSettings.network || 'tcp';
-    const security = streamSettings.security || 'none';
-    const params = {};
-    params['security'] = security;
-    params['type'] = network;
-    
-    if (network === 'tcp') {
-        params['headerType'] = '';
-        params['path'] = '';
-        params['host'] = '';
-        const tcpSettings = streamSettings.tcpSettings || {};
-        const header = tcpSettings.header || {};
-        if (header.type === 'http') {
-            params['headerType'] = 'http';
-            const request = header.request || {};
-            if (request.path) {
-                const pathVal = request.path;
-                params['path'] = Array.isArray(pathVal) ? pathVal.join(',') : pathVal;
-            }
-            if (request.headers && request.headers.Host) {
-                const hostVal = request.headers.Host;
-                params['host'] = Array.isArray(hostVal) ? hostVal.join(',') : hostVal;
-            }
-        }
-    } else if (network === 'ws') {
-        const wsSettings = streamSettings.wsSettings || {};
-        if (wsSettings.path) params['path'] = wsSettings.path;
-        if (wsSettings.headers && wsSettings.headers.Host) params['host'] = wsSettings.headers.Host;
-    }
-    
-    if (user.flow) params['flow'] = user.flow;    
-    if (security === 'reality') {
-        const reality = streamSettings.realitySettings || {};
-        if (reality.serverName) params['sni'] = reality.serverName;
-        if (reality.fingerprint) params['fp'] = reality.fingerprint;
-        if (reality.publicKey) params['pbk'] = reality.publicKey;
-        if (reality.shortId) params['sid'] = reality.shortId;
-        if (reality.spiderX) params['spx'] = reality.spiderX;
-    } else if (security === 'tls') {
-        const tls = streamSettings.tlsSettings || {};
-        if (tls.serverName) params['sni'] = tls.serverName;
-        if (tls.fingerprint) params['fp'] = tls.fingerprint;
-        if (tls.alpn) {
-            const alpnVal = tls.alpn;
-            params['alpn'] = Array.isArray(alpnVal) ? alpnVal.join(',') : alpnVal;
-        }
-    }
-    
-    const paramOrder = ['security', 'type', 'headerType', 'path', 'host', 'flow', 'sni', 'fp', 'pbk', 'sid', 'spx', 'alpn'];
-    const queryParts = [];
-    for (const key of paramOrder) {
-        if (key in params) {
-            queryParts.push(`${key}=${encodeURIComponent(String(params[key]))}`);
-        }
-    }
-    
-    const fragment = remarks ? encodeURIComponent(remarks) : '';
-    let vlessUrl = `vless://${uuid}@${address}:${port}?${queryParts.join('&')}`;
-    if (fragment) vlessUrl += `#${fragment}`;
-    return vlessUrl;
-}
-
-// ==================== KOALA CLASH ====================
-
-function parseKoalaConfig(text) {
-    const config = { proxies: [] };
-    const lines = text.split('\n');
-    let currentProxy = null;
-    let inProxies = false;
-    let currentKey = null;
-    
-    for (let i = 0; i < lines.length; i++) {
-        const rawLine = lines[i];
-        const trimmed = rawLine.trim();
-        if (!trimmed || trimmed.startsWith('#')) continue;
-        const indent = rawLine.length - rawLine.trimStart().length;
-        
-        if (trimmed === 'proxies:') { inProxies = true; continue; }
-        if (!inProxies) continue;
-                if (trimmed.startsWith('- ')) {
-            if (currentProxy) config.proxies.push(currentProxy);
-            currentProxy = {};
-            currentKey = null;
-            const content = trimmed.substring(2).trim();
-            if (content.includes(':')) {
-                const colonIndex = content.indexOf(':');
-                const key = content.substring(0, colonIndex).trim();
-                const value = parseYamlValue(content.substring(colonIndex + 1).trim());
-                currentProxy[key] = value;
-                currentKey = key;
-            }
-            continue;
-        }
-        
-        if (!currentProxy) continue;
-        
-        if (trimmed.endsWith(':') && !trimmed.includes(': ')) {
-            currentKey = trimmed.slice(0, -1).trim();
-            currentProxy[currentKey] = {};
-            continue;
-        }
-        
-        if (trimmed.startsWith('- ') && currentKey && typeof currentProxy[currentKey] === 'object' && !Array.isArray(currentProxy[currentKey])) {
-            if (!Array.isArray(currentProxy[currentKey])) currentProxy[currentKey] = [];
-            currentProxy[currentKey].push(parseYamlValue(trimmed.substring(2).trim()));
-            continue;
-        }
-        
-        if (trimmed.includes(':')) {
-            const colonIndex = trimmed.indexOf(':');
-            const key = trimmed.substring(0, colonIndex).trim();
-            const valueStr = trimmed.substring(colonIndex + 1).trim();
-            if (indent > 6 && currentKey && typeof currentProxy[currentKey] === 'object') {
-                currentProxy[currentKey][key] = parseYamlValue(valueStr);
-            } else {
-                currentProxy[key] = parseYamlValue(valueStr);
-                currentKey = key;
-            }
-        }
-    }
-    if (currentProxy) config.proxies.push(currentProxy);
-    return config;
-}
-
-function parseYamlValue(valueStr) {
-    if (!valueStr) return '';
-    if ((valueStr.startsWith("'") && valueStr.endsWith("'")) || (valueStr.startsWith('"') && valueStr.endsWith('"'))) {
-        return valueStr.slice(1, -1);
-    }    if (valueStr === 'true') return true;
-    if (valueStr === 'false') return false;
-    if (/^\d+$/.test(valueStr)) return parseInt(valueStr, 10);
-    if (/^\d+\.\d+$/.test(valueStr)) return parseFloat(valueStr);
-    return valueStr;
-}
-
-function koalaToVlessArray(config) {
-    const results = [];
-    for (const proxy of config.proxies || []) {
-        if (proxy.type !== 'vless' && proxy.type !== 'VLESS') continue;
-        try {
-            const link = buildVlessFromKoalaProxy(proxy);
-            results.push({ name: proxy.name || 'VLESS', link: link });
-        } catch (e) { console.warn('Ошибка прокси:', proxy.name, e); }
-    }
-    return results;
-}
-
-function buildVlessFromKoalaProxy(vlessProxy) {
-    const uuid = vlessProxy.uuid || vlessProxy.id;
-    const address = vlessProxy.server || vlessProxy.address;
-    const port = vlessProxy.port;
-    if (!uuid || !address || !port) throw new Error("Нет uuid/server/port");
-    
-    const params = {};
-    params['security'] = (vlessProxy.tls === true || vlessProxy.tls === 'true') ? 'tls' : 'none';
-    params['type'] = vlessProxy.network || 'tcp';
-    
-    if (params['type'] === 'ws') {
-        if (vlessProxy.path) params['path'] = vlessProxy.path;
-        if (vlessProxy.host) params['host'] = vlessProxy.host;
-        else if (vlessProxy.headers && vlessProxy.headers.Host) params['host'] = vlessProxy.headers.Host;
-    } else if (params['type'] === 'tcp') {
-        params['headerType'] = vlessProxy.headerType || '';
-        if (vlessProxy.path) params['path'] = vlessProxy.path;
-        if (vlessProxy.host) params['host'] = vlessProxy.host;
-    }
-    
-    if (params['security'] === 'tls') {
-        if (vlessProxy.servername) params['sni'] = vlessProxy.servername;
-        else if (vlessProxy.sni) params['sni'] = vlessProxy.sni;
-        if (vlessProxy.fp) params['fp'] = vlessProxy.fp;
-        else if (vlessProxy.fingerprint) params['fp'] = vlessProxy.fingerprint;
-        if (vlessProxy.alpn) params['alpn'] = Array.isArray(vlessProxy.alpn) ? vlessProxy.alpn.join(',') : vlessProxy.alpn;
-        if (vlessProxy.flow) params['flow'] = vlessProxy.flow;
-    }
-    
-    if (vlessProxy.reality === true || vlessProxy.reality === 'true') {
-        params['security'] = 'reality';        if (vlessProxy.servername) params['sni'] = vlessProxy.servername;
-        else if (vlessProxy.sni) params['sni'] = vlessProxy.sni;
-        if (vlessProxy.fp) params['fp'] = vlessProxy.fp;
-        else if (vlessProxy.fingerprint) params['fp'] = vlessProxy.fingerprint;
-        if (vlessProxy.pbk || vlessProxy.publicKey) params['pbk'] = vlessProxy.pbk || vlessProxy.publicKey;
-        if (vlessProxy.sid || vlessProxy.shortId) params['sid'] = vlessProxy.sid || vlessProxy.shortId;
-        if (vlessProxy.spx || vlessProxy.spiderX) params['spx'] = vlessProxy.spx || vlessProxy.spiderX;
-    }
-    
-    const paramOrder = ['security', 'type', 'headerType', 'path', 'host', 'flow', 'sni', 'fp', 'pbk', 'sid', 'spx', 'alpn'];
-    const queryParts = [];
-    for (const key of paramOrder) {
-        if (key in params) queryParts.push(`${key}=${encodeURIComponent(String(params[key]))}`);
-    }
-    
-    const fragment = (vlessProxy.name || '') ? encodeURIComponent(vlessProxy.name) : '';
-    let vlessUrl = `vless://${uuid}@${address}:${port}?${queryParts.join('&')}`;
-    if (fragment) vlessUrl += `#${fragment}`;
-    return vlessUrl;
-}
-
-// ==================== МОДАЛЬНЫЕ ОКНА ====================
-
-function showExtractedUrlModal(subUrl, originalContent) {
-    const oldModal = document.getElementById('manual-modal');
-    if (oldModal) oldModal.remove();
-    
-    const modal = document.createElement('div');
-    modal.id = 'manual-modal';
-    modal.className = 'manual-modal-overlay';
-    modal.innerHTML = `
-        <div class="manual-modal-box">
-            <div class="manual-modal-topbar">
-                <div class="dot red"></div>
-                <div class="dot yellow"></div>
-                <div class="dot green"></div>
-                <span class="manual-modal-title">// ✓ Прямая ссылка подписки найдена</span>
-                <button class="manual-modal-close" onclick="closeManualModal()">✕</button>
-            </div>
-            <div class="manual-modal-body">
-                <div class="success-icon">✅</div>
-                <div class="success-title">Панель управления распознана</div>
-                <div class="success-text">
-                    Найдена прямая ссылка на подписку. Вставьте её в основное поле URL и нажмите [ 📥 Загрузить ].
-                </div>
-                
-                <div class="extracted-url-block">
-                    <div class="extracted-url-label">Прямая ссылка на подписку:</div>
-                    <div class="extracted-url-value" id="extracted-url-value">${escapeHtml(subUrl)}</div>
-                    <div class="extracted-url-actions">                        <button class="btn btn-blue" onclick="copyExtractedUrl()" id="copy-extracted-btn">
-                            [ 📋 Скопировать ]
-                        </button>
-                        <button class="btn btn-ghost" onclick="useExtractedUrl()">
-                            [ ⚡ Использовать ]
-                        </button>
-                    </div>
-                </div>
-                
-                <button class="btn btn-ghost" onclick="closeManualModal()" style="margin-top:16px;width:100%;">
-                    [ Закрыть ]
-                </button>
-            </div>
-        </div>
-    `;
-    
-    document.body.appendChild(modal);
-}
-
-function copyExtractedUrl() {
-    const urlEl = document.getElementById('extracted-url-value');
-    if (!urlEl) return;
-    
-    const url = urlEl.textContent;
-    const btn = document.getElementById('copy-extracted-btn');
-    
-    navigator.clipboard.writeText(url).then(() => {
-        if (btn) {
-            btn.textContent = '[ ✓ Скопировано! ]';
-            setTimeout(() => {
-                btn.textContent = '[ 📋 Скопировать ]';
-            }, 2000);
-        }
-    }).catch(() => {
-        const ta = document.createElement('textarea');
-        ta.value = url;
-        document.body.appendChild(ta);
-        ta.select();
-        document.execCommand('copy');
-        document.body.removeChild(ta);
-        
-        if (btn) {
-            btn.textContent = '[ ✓ Скопировано! ]';
-            setTimeout(() => {
-                btn.textContent = '[ 📋 Скопировать ]';
-            }, 2000);
-        }
-    });
-}
-function useExtractedUrl() {
-    const urlEl = document.getElementById('extracted-url-value');
-    if (!urlEl) return;
-    
-    const url = urlEl.textContent;
-    closeManualModal();
-    
-    document.getElementById('subscription-url').value = url;
     document.getElementById('subscription-raw').value = '';
-    
-    setStatus('ok', `[ OK ] ссылка вставлена, загружаю...`);
-    
-    loadSubscription();
+    setStatus('statusBar', 'очищено', '');
 }
-
-function closeManualModal() {
-    const modal = document.getElementById('manual-modal');
-    if (modal) modal.remove();
-}
-
-function showNoVlessModal(html) {
-    const oldModal = document.getElementById('manual-modal');
-    if (oldModal) oldModal.remove();
-    
-    const modal = document.createElement('div');
-    modal.id = 'manual-modal';
-    modal.className = 'manual-modal-overlay';
-    modal.innerHTML = `
-        <div class="manual-modal-box">
-            <div class="manual-modal-topbar">
-                <div class="dot red"></div>
-                <div class="dot yellow"></div>
-                <div class="dot green"></div>
-                <span class="manual-modal-title">// VLESS не найдены</span>
-                <button class="manual-modal-close" onclick="closeManualModal()">✕</button>
-            </div>
-            <div class="manual-modal-body">
-                <div class="success-icon">⚠️</div>
-                <div class="success-title" style="color:#f59e0b;">VLESS ссылки не найдены</div>
-                <div class="success-text">
-                    В загруженном HTML нет закодированных VLESS ссылок.<br>
-                    Сервер отдаёт только страницу с инструкцией.
-                </div>
-                
-                <div class="manual-alt" style="margin-top:20px;">
-                    <div class="manual-alt-title">💡 Что делать</div>
-                    <div class="manual-alt-text">
-                        1. Откройте ваш личный кабинет провайдера в браузере<br>
-                        2. Найдите раздел "Подписка" или "Ключи подключения"<br>
-                        3. Скопируйте <b>прямую ссылку подписки</b><br>                        4. Вставьте её в основное поле URL<br>
-                        5. Нажмите <b>[ 📥 Загрузить ]</b>
-                    </div>
-                </div>
-                
-                <details class="raw-details" style="margin-top:16px;">
-                    <summary>🔍 Статистика поиска</summary>
-                    <div class="raw-html-preview" style="margin-top:10px;">
-HTML размер: ${html.length} символов
-Прямых vless:// найдено: ${(html.match(/vless:\/\//g) || []).length}
-data-* атрибутов: ${(html.match(/data-[a-z\-]+=/gi) || []).length}
-                    </div>
-                </details>
-                
-                <button class="btn btn-ghost" onclick="closeManualModal()" style="margin-top:16px;width:100%;">
-                    [ Закрыть ]
-                </button>
-            </div>
-        </div>
-    `;
-    
-    document.body.appendChild(modal);
+function clearChecker() { document.getElementById('vless-input').value = ''; setStatus('statusBar', 'очищено', ''); }
+function toggleDebug() {
+    const panel = document.getElementById('debug-panel');
+    const text = document.getElementById('debug-toggle-text');
+    if (!panel) return;
+    const show = panel.style.display !== 'block';
+    panel.style.display = show ? 'block' : 'none';
+    if (text) text.textContent = show ? '▼ Скрыть диагностику' : '▶ Показать диагностику';
 }

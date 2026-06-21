@@ -1,0 +1,501 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SSH Term — VLESS Tools</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/xterm@5.3.0/css/xterm.css">
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        :root {
+            --bg: #0a0a0a;
+            --bg-card: #111;
+            --bg-input: #1a1a1a;
+            --gold: #FFD700;
+            --gold-dark: #DAA520;
+            --text: #f0f0f0;
+            --muted: #888;
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', monospace;
+            background: var(--bg);
+            color: var(--text);
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 20px;
+        }
+        h1 {
+            font-size: 24px;
+            font-weight: 300;
+            letter-spacing: 4px;
+            color: var(--gold);
+            margin-bottom: 24px;
+            text-transform: uppercase;
+        }
+        .connect-panel {
+            width: 100%;
+            max-width: 800px;
+            background: var(--bg-card);
+            border: 1px solid rgba(255, 215, 0, 0.15);
+            border-radius: 12px;
+            padding: 24px;
+            margin-bottom: 20px;
+        }
+        .form-row {
+            display: flex;
+            gap: 12px;
+            flex-wrap: wrap;
+            margin-bottom: 12px;
+        }
+        .form-field {
+            flex: 1;
+            min-width: 120px;
+        }
+        .form-field label {
+            display: block;
+            font-size: 11px;
+            color: var(--muted);
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            margin-bottom: 6px;
+        }
+        .form-field input {
+            width: 100%;
+            padding: 10px 14px;
+            background: var(--bg-input);
+            border: 1px solid rgba(255, 215, 0, 0.15);
+            border-radius: 8px;
+            color: var(--text);
+            font-family: monospace;
+            font-size: 13px;
+            outline: none;
+            transition: border-color 0.3s;
+        }
+        .form-field input:focus {
+            border-color: var(--gold);
+            box-shadow: 0 0 10px rgba(255, 215, 0, 0.1);
+        }
+        .btn-row {
+            display: flex;
+            gap: 12px;
+            flex-wrap: wrap;
+        }
+        .btn {
+            padding: 10px 24px;
+            font-size: 13px;
+            font-weight: 600;
+            font-family: monospace;
+            border-radius: 8px;
+            cursor: pointer;
+            border: 1px solid transparent;
+            transition: all 0.3s;
+            letter-spacing: 0.5px;
+            text-transform: uppercase;
+        }
+        .btn-primary {
+            background: linear-gradient(135deg, var(--gold), var(--gold-dark));
+            color: var(--bg);
+            border: none;
+        }
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 15px rgba(255, 215, 0, 0.3);
+        }
+        .btn-primary:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            transform: none;
+        }
+        .btn-ghost {
+            background: transparent;
+            color: var(--text);
+            border-color: rgba(255, 255, 255, 0.2);
+        }
+        .btn-ghost:hover {
+            border-color: var(--gold);
+            color: var(--gold);
+        }
+        .btn-danger {
+            background: transparent;
+            color: #ef4444;
+            border-color: #ef4444;
+        }
+        .btn-danger:hover {
+            background: rgba(239, 68, 68, 0.1);
+        }
+        .terminal-wrapper {
+            width: 100%;
+            max-width: 800px;
+        }
+        .terminal-box {
+            background: #0b1120;
+            border: 1px solid rgba(255, 215, 0, 0.15);
+            border-radius: 12px;
+            overflow: hidden;
+        }
+        .terminal-topbar {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 10px 16px;
+            background: var(--bg-card);
+            border-bottom: 1px solid rgba(255, 215, 0, 0.1);
+        }
+        .dot { width: 10px; height: 10px; border-radius: 50%; }
+        .dot.red { background: #ef4444; }
+        .dot.yellow { background: #f59e0b; }
+        .dot.green { background: #22c55e; }
+        .term-title {
+            font-size: 12px;
+            color: var(--muted);
+            margin-left: 8px;
+            flex: 1;
+            font-family: monospace;
+        }
+        .term-status {
+            font-size: 11px;
+            color: var(--muted);
+            padding: 2px 8px;
+            border-radius: 4px;
+            background: rgba(255,255,255,0.05);
+        }
+        .term-status.connected { color: #22c55e; background: rgba(34,197,94,0.1); }
+        .term-status.error { color: #ef4444; background: rgba(239,68,68,0.1); }
+        #terminal-container { height: 400px; padding: 4px; }
+        .status-bar {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 10px 16px;
+            background: var(--bg-card);
+            border-top: 1px solid rgba(255, 215, 0, 0.1);
+            font-family: monospace;
+            font-size: 12px;
+            color: var(--muted);
+        }
+        .status-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); }
+        .status-dot.ok { background: #22c55e; }
+        .status-dot.err { background: #ef4444; }
+        .hidden { display: none; }
+        .quick-presets {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 16px;
+            flex-wrap: wrap;
+        }
+        .preset-btn {
+            padding: 6px 14px;
+            font-size: 12px;
+            font-family: monospace;
+            background: rgba(255, 215, 0, 0.08);
+            border: 1px solid rgba(255, 215, 0, 0.2);
+            border-radius: 6px;
+            color: var(--gold);
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .preset-btn:hover {
+            background: rgba(255, 215, 0, 0.15);
+            border-color: var(--gold);
+        }
+        .proxy-info {
+            font-size: 12px;
+            color: var(--muted);
+            margin-bottom: 16px;
+            padding: 8px 12px;
+            background: rgba(255, 215, 0, 0.05);
+            border-radius: 6px;
+            border: 1px solid rgba(255, 215, 0, 0.1);
+        }
+        @media (max-width: 600px) {
+            body { padding: 10px; }
+            .connect-panel { padding: 16px; }
+            .form-field { min-width: 100%; }
+        }
+    </style>
+</head>
+<body>
+    <h1>SSH Terminal</h1>
+
+    <div class="connect-panel" id="connect-panel">
+        <div class="proxy-info" id="proxy-info">
+            ⚡ Proxy: <strong>ws://127.0.0.1:8888</strong>
+            <span style="float:right;">
+                <span id="proxy-check">checking...</span>
+            </span>
+        </div>
+
+        <div class="quick-presets">
+            <button class="preset-btn" onclick="fillPreset('192.168.2.1', 22, 'root', '')">OpenWRT (192.168.2.1)</button>
+            <button class="preset-btn" onclick="fillPreset('192.168.1.1', 22, 'root', '')">OpenWRT (192.168.1.1)</button>
+            <button class="preset-btn" onclick="fillPreset('10.0.0.1', 22, 'root', '')">OpenWRT (10.0.0.1)</button>
+        </div>
+
+        <div class="form-row">
+            <div class="form-field">
+                <label>Host</label>
+                <input type="text" id="ssh-host" value="192.168.2.1" placeholder="192.168.2.1">
+            </div>
+            <div class="form-field" style="max-width:100px;">
+                <label>Port</label>
+                <input type="number" id="ssh-port" value="22">
+            </div>
+        </div>
+        <div class="form-row">
+            <div class="form-field">
+                <label>Username</label>
+                <input type="text" id="ssh-user" value="root" placeholder="root">
+            </div>
+            <div class="form-field">
+                <label>Password</label>
+                <input type="password" id="ssh-password" placeholder="password">
+            </div>
+        </div>
+        <div class="btn-row">
+            <button class="btn btn-primary" id="connect-btn" onclick="connect()">[ Connect ]</button>
+            <button class="btn btn-ghost" id="disconnect-btn" onclick="disconnect()" style="display:none;">[ Disconnect ]</button>
+        </div>
+    </div>
+
+    <div class="terminal-wrapper">
+        <div class="terminal-box">
+            <div class="terminal-topbar">
+                <div class="dot red"></div>
+                <div class="dot yellow"></div>
+                <div class="dot green"></div>
+                <span class="term-title" id="term-title">// SSH Terminal</span>
+                <span class="term-status" id="term-status">disconnected</span>
+            </div>
+            <div id="terminal-container"></div>
+            <div class="status-bar">
+                <div class="status-dot" id="status-dot"></div>
+                <span id="status-text">Not connected. Fill the form and click Connect.</span>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/xterm@5.3.0/lib/xterm.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/xterm-addon-fit@0.8.0/lib/xterm-addon-fit.js"></script>
+    <script>
+        const PROXY_URL = "ws://127.0.0.1:8888";
+
+        let term = null;
+        let fitAddon = null;
+        let ws = null;
+        let connected = false;
+
+        function initTerminal() {
+            if (term) return;
+            term = new Terminal({
+                cursorBlink: true,
+                cursorStyle: "block",
+                fontSize: 14,
+                fontFamily: "'Courier New', monospace",
+                theme: {
+                    background: "#0b1120",
+                    foreground: "#e5e7eb",
+                    cursor: "#FFD700",
+                    selectionBackground: "rgba(255, 215, 0, 0.3)",
+                    black: "#000000",
+                    red: "#ef4444",
+                    green: "#22c55e",
+                    yellow: "#f59e0b",
+                    blue: "#38bdf8",
+                    magenta: "#a855f7",
+                    cyan: "#22d3ee",
+                    white: "#e5e7eb",
+                },
+            });
+            fitAddon = new FitAddon.FitAddon();
+            term.loadAddon(fitAddon);
+
+            const container = document.getElementById("terminal-container");
+            term.open(container);
+
+            setTimeout(() => fitAddon.fit(), 50);
+            window.addEventListener("resize", () => {
+                if (fitAddon) fitAddon.fit();
+            });
+        }
+
+        function fillPreset(host, port, user, pass) {
+            document.getElementById("ssh-host").value = host;
+            document.getElementById("ssh-port").value = port;
+            document.getElementById("ssh-user").value = user;
+            document.getElementById("ssh-password").value = pass;
+        }
+
+        function setStatus(text, type) {
+            document.getElementById("status-text").textContent = text;
+            const dot = document.getElementById("status-dot");
+            dot.className = "status-dot" + (type === "ok" ? " ok" : type === "err" ? " err" : "");
+        }
+
+        function setTermStatus(text, type) {
+            const el = document.getElementById("term-status");
+            el.textContent = text;
+            el.className = "term-status" + (type === "ok" ? " connected" : type === "err" ? " error" : "");
+        }
+
+        function log(msg) {
+            if (term) term.writeln(`\x1b[90m[${new Date().toLocaleTimeString()}]\x1b[0m ${msg}`);
+        }
+
+        function connect() {
+            const host = document.getElementById("ssh-host").value.trim();
+            const port = parseInt(document.getElementById("ssh-port").value) || 22;
+            const user = document.getElementById("ssh-user").value.trim() || "root";
+            const password = document.getElementById("ssh-password").value;
+
+            if (!host) { setStatus("Enter host address", "err"); return; }
+
+            initTerminal();
+            term.reset();
+            document.getElementById("connect-btn").disabled = true;
+            document.getElementById("connect-btn").textContent = "[ Connecting... ]";
+            setStatus(`Connecting to ${user}@${host}:${port}...`, "ok");
+            setTermStatus("connecting...");
+            document.getElementById("term-title").textContent = `// ${user}@${host}:${port}`;
+
+            try {
+                ws = new WebSocket(PROXY_URL);
+            } catch (e) {
+                setStatus(`WebSocket error: ${e.message}`, "err");
+                setTermStatus("error", "err");
+                document.getElementById("connect-btn").disabled = false;
+                document.getElementById("connect-btn").textContent = "[ Connect ]";
+                log(`\x1b[31mFailed to connect: ${e.message}\x1b[0m`);
+                return;
+            }
+
+            ws.binaryType = "arraybuffer";
+
+            ws.onopen = () => {
+                log("Proxy connected. Sending credentials...");
+                const msg = JSON.stringify({
+                    host,
+                    port,
+                    user,
+                    password,
+                    cols: term.cols,
+                    rows: term.rows,
+                });
+                ws.send(msg);
+            };
+
+            ws.onmessage = (event) => {
+                if (typeof event.data === "string") {
+                    try {
+                        const msg = JSON.parse(event.data);
+                        switch (msg.type) {
+                            case "status":
+                                setStatus(msg.text, "ok");
+                                log(`\x1b[33m${msg.text}\x1b[0m`);
+                                break;
+                            case "ready":
+                                connected = true;
+                                setStatus("Connected", "ok");
+                                setTermStatus("connected", "ok");
+                                document.getElementById("connect-btn").style.display = "none";
+                                document.getElementById("disconnect-btn").style.display = "inline-block";
+                                document.getElementById("connect-btn").disabled = false;
+                                document.getElementById("connect-btn").textContent = "[ Connect ]";
+                                log(`\x1b[32mShell ready. Type commands...\x1b[0m`);
+                                break;
+                            case "data":
+                                term.write(msg.text);
+                                break;
+                            case "error":
+                                setStatus(msg.text, "err");
+                                setTermStatus("error", "err");
+                                log(`\x1b[31m${msg.text}\x1b[0m`);
+                                cleanup();
+                                break;
+                        }
+                    } catch {
+                        term.write(event.data);
+                    }
+                } else if (event.data instanceof ArrayBuffer) {
+                    const bytes = new Uint8Array(event.data);
+                    term.write(bytes);
+                }
+            };
+
+            ws.onerror = () => {
+                setStatus("WebSocket error - proxy not running?", "err");
+                setTermStatus("no proxy", "err");
+                log(`\x1b[31mWebSocket error. Is the proxy running at ${PROXY_URL}?\x1b[0m`);
+                cleanup();
+            };
+
+            ws.onclose = (event) => {
+                if (connected) {
+                    log(`\x1b[33mConnection closed (${event.code})\x1b[0m`);
+                }
+                setStatus("Disconnected", "err");
+                setTermStatus("disconnected");
+                cleanup();
+            };
+        }
+
+        function disconnect() {
+            if (ws) {
+                try { ws.close(1000, "User disconnect"); } catch {}
+                ws = null;
+            }
+            connected = false;
+            setStatus("Disconnected", "err");
+            setTermStatus("disconnected");
+            document.getElementById("connect-btn").style.display = "inline-block";
+            document.getElementById("disconnect-btn").style.display = "none";
+            document.getElementById("connect-btn").disabled = false;
+            document.getElementById("connect-btn").textContent = "[ Connect ]";
+            log(`\x1b[33mDisconnected\x1b[0m`);
+        }
+
+        function cleanup() {
+            connected = false;
+            document.getElementById("connect-btn").style.display = "inline-block";
+            document.getElementById("connect-btn").disabled = false;
+            document.getElementById("connect-btn").textContent = "[ Connect ]";
+            document.getElementById("disconnect-btn").style.display = "none";
+        }
+
+        function checkProxy() {
+            const el = document.getElementById("proxy-check");
+            try {
+                const testWs = new WebSocket(PROXY_URL);
+                testWs.onopen = () => {
+                    el.innerHTML = '<span style="color:#22c55e;">✓ running</span>';
+                    testWs.close(1000);
+                };
+                testWs.onerror = () => {
+                    el.innerHTML = '<span style="color:#ef4444;">✗ not running</span>';
+                };
+                setTimeout(() => {
+                    if (testWs.readyState === WebSocket.OPEN || testWs.readyState === WebSocket.CONNECTING) {
+                        try { testWs.close(); } catch {}
+                    }
+                }, 2000);
+            } catch {
+                el.innerHTML = '<span style="color:#ef4444;">✗ unavailable</span>';
+            }
+        }
+
+        document.addEventListener("DOMContentLoaded", () => {
+            initTerminal();
+            checkProxy();
+
+            document.getElementById("ssh-password").addEventListener("keydown", (e) => {
+                if (e.key === "Enter") connect();
+            });
+        });
+
+        window.addEventListener("beforeunload", () => {
+            if (ws) { try { ws.close(); } catch {} }
+        });
+    </script>
+</body>
+</html>

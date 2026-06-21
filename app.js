@@ -1,146 +1,114 @@
-const ROUTES = {
-    '': { title: 'VLESS Tools — Инструменты нового поколения', init: 'initHome' },
-    'converter': { title: 'Конвертер — VLESS Tools', init: 'initConverter' },
-    'checker': { title: 'Чекер — VLESS Tools', init: 'initChecker' },
-    'blog': { title: 'Блог — VLESS Tools', init: 'initBlog' },
-    'admin': { title: 'Админ-панель — VLESS Tools', init: 'initAdmin' },
-};
+function navigate() {
+    const hash = window.location.hash || '#home';
+    const app = document.getElementById('app');
+    if (!app) return;
 
-const PAGE_TEMPLATES = {};
+    const isPost = hash.startsWith('#blog/');
+    const isAdmin = hash.startsWith('#admin');
 
-async function loadTemplates() {
-    const pages = ['home', 'converter', 'checker', 'admin', 'blog'];
-    for (const page of pages) {
-        const template = document.getElementById(`page-${page}`);
-        if (template) {
-            PAGE_TEMPLATES[page] = template.innerHTML;
-        }
+    if (isAdmin && hash.includes('token=')) {
+        const token = hash.split('token=')[1].split('&')[0];
+        try { localStorage.setItem('blog_token', token); } catch {}
+        window.location.hash = '#admin';
+        return;
     }
+
+    let templateId = 'page-home';
+    if (hash === '#converter') templateId = 'page-converter';
+    else if (hash === '#checker') templateId = 'page-checker';
+    else if (hash === '#blog') templateId = 'page-blog';
+    else if (hash === '#admin') templateId = 'page-admin';
+    else if (isPost) templateId = 'page-blog';
+
+    const template = document.getElementById(templateId);
+    if (!template) return;
+
+    const clone = template.content.cloneNode(true);
+    app.innerHTML = '';
+    app.appendChild(clone);
+
+    setActiveNav(templateId.replace('page-', ''));
+    document.title = getTitle(templateId);
+
+    const initFn = { home: initHome, converter: initConverter, checker: initChecker, blog: () => initBlog(hash), admin: initAdmin };
+    const key = templateId.replace('page-', '');
+    if (initFn[key]) initFn[key]();
 }
 
-function getRoute() {
-    const hash = window.location.hash.slice(1).toLowerCase();
-    if (hash.startsWith('blog/')) return 'post';
-    if (ROUTES[hash]) return hash;
-    return '';
+function initBlog(hash) {
+    if (hash.startsWith('#blog/')) renderBlogPost(hash.replace('#blog/', ''));
+    else loadBlogPosts();
 }
 
-function navigateTo(route) {
-    if (route === '') {
-        window.location.hash = '';
-    } else {
-        window.location.hash = route;
-    }
+function renderBlogPost(slug) {
+    const app = document.getElementById('app');
+    const wrapper = app.querySelector('.wrapper');
+    if (!wrapper) return;
+    wrapper.innerHTML = '<div class="blog-loading">Загрузка поста...</div>';
+
+    fetch(`${getBlogApiUrl()}/api/posts/${encodeURIComponent(slug)}`)
+        .then(r => r.json())
+        .then(post => {
+            if (post.error) { wrapper.innerHTML = `<p style="color:var(--white-muted);text-align:center;padding:60px;">Пост не найден</p>`; return; }
+            wrapper.innerHTML = `
+                <div class="blog-post-page">
+                    <a href="#blog" class="blog-back-link">← Все записи</a>
+                    <article class="blog-post-full">
+                        <div class="blog-post-meta">
+                            <span class="blog-post-date">${new Date(post.created_at).toLocaleDateString('ru-RU', {year:'numeric',month:'long',day:'numeric'})}</span>
+                            ${(post.tags||[]).map(t => `<span class="blog-tag">${escapeHtml(t)}</span>`).join('')}
+                        </div>
+                        <h1 class="blog-post-title">${escapeHtml(post.title)}</h1>
+                        <div class="blog-post-content">${renderMarkdown(post.content)}</div>
+                    </article>
+                </div>
+            `;
+            setActiveNav('blog');
+            document.title = `${post.title} — VLESS Tools`;
+        })
+        .catch(() => { wrapper.innerHTML = '<p style="color:var(--white-muted);text-align:center;padding:60px;">Ошибка загрузки поста</p>'; });
 }
 
-function setActiveNav(route) {
-    if (route === 'post') route = 'blog';
-    document.querySelectorAll('[data-nav]').forEach(el => {
-        el.classList.toggle('active', el.dataset.nav === route || (route === '' && el.dataset.nav === 'home'));
+function renderMarkdown(text) {
+    if (!text) return '';
+    let html = text
+        .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+        .replace(/^### (.+)$/gm, '<h3>$1</h3>')
+        .replace(/^## (.+)$/gm, '<h2>$1</h2>')
+        .replace(/^# (.+)$/gm, '<h1>$1</h1>')
+        .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+        .replace(/\*(.+?)\*/g, '<em>$1</em>')
+        .replace(/`([^`]+)`/g, '<code>$1</code>')
+        .replace(/^- (.+)$/gm, '<li>$1</li>')
+        .replace(/(<li>.*<\/li>\n?)+/g, '<ul>$&</ul>')
+        .replace(/!\[(.+?)\]\((.+?)\)/g, '<img src="$2" alt="$1" style="max-width:100%;border-radius:8px;margin:16px 0;">')
+        .replace(/\[(.+?)\]\((.+?)\)/g, '<a href="$2" target="_blank">$1</a>')
+        .replace(/\n\n/g, '</p><p>')
+        .replace(/\n/g, '<br>');
+    return '<p>' + html + '</p>';
+}
+
+function setActiveNav(page) {
+    document.querySelectorAll('[data-nav]').forEach(a => {
+        a.classList.toggle('active', a.getAttribute('data-nav') === page);
     });
 }
 
-async function router() {
-    const route = getRoute();
-    const app = document.getElementById('app');
-
-    if (route === 'post') {
-        const slug = window.location.hash.slice(6);
-        await renderBlogPost(slug);
-        return;
-    }
-
-    setActiveNav(route);
-
-    if (route === '') {
-        app.innerHTML = PAGE_TEMPLATES['home'];
-        window.initHome();
-        return;
-    }
-
-    const routeDef = ROUTES[route];
-    if (!routeDef) {
-        navigateTo('');
-        return;
-    }
-
-    document.title = routeDef.title;
-    app.innerHTML = PAGE_TEMPLATES[route];
-    window[routeDef.init]();
+function getTitle(templateId) {
+    const titles = { 'page-home': 'VLESS Tools — Инструменты нового поколения', 'page-converter': 'Конвертер — VLESS Tools', 'page-checker': 'Чекер — VLESS Tools', 'page-blog': 'Блог — VLESS Tools', 'page-admin': 'Админ-панель — VLESS Tools' };
+    return titles[templateId] || 'VLESS Tools';
 }
 
-async function renderBlogPost(slug) {
-    const app = document.getElementById('app');
-    document.title = 'Загрузка... — VLESS Tools';
-
-    try {
-        const res = await fetch(`${BLOG_API_URL}/api/posts/${encodeURIComponent(slug)}`);
-        if (!res.ok) throw new Error('Not found');
-        const post = await res.json();
-
-        document.title = `${post.title} — VLESS Tools`;
-        app.innerHTML = `
-            <div class="wrapper blog-post-page">
-                <a href="#blog" class="blog-back-link">← Назад к блогу</a>
-                <article class="blog-post-full">
-                    <div class="blog-post-meta">
-                        <span class="blog-post-date">${new Date(post.createdAt).toLocaleDateString('ru')}</span>
-                        ${post.tags ? post.tags.map(t => `<span class="blog-tag">${escapeHtml(t)}</span>`).join('') : ''}
-                    </div>
-                    <h1 class="blog-post-title">${escapeHtml(post.title)}</h1>
-                    <div class="blog-post-content">${post.contentHtml || post.content}</div>
-                </article>
-            </div>
-        `;
-
-        if (window.Prism) {
-            Prism.highlightAll();
-        }
-    } catch (e) {
-        app.innerHTML = `
-            <div class="wrapper" style="text-align:center;padding:120px 20px;">
-                <h2 style="color:var(--gold-primary);margin-bottom:16px;">Пост не найден</h2>
-                <p style="color:var(--white-muted);margin-bottom:24px;">Возможно, он был удалён или ссылка неверна.</p>
-                <a href="#blog" class="btn-primary">← Вернуться в блог</a>
-            </div>
-        `;
-    }
+function getBlogApiUrl() {
+    try { return localStorage.getItem('blog_api_url') || 'https://spare-macaque-5540.svoboda.deno.net'; }
+    catch { return 'https://spare-macaque-5540.svoboda.deno.net'; }
 }
 
-function escapeHtml(text) {
-    const div = document.createElement('div');
-    div.textContent = text;
-    return div.innerHTML;
-}
-
-function handleOAuthCallback() {
-    const hash = window.location.hash;
-    if (hash.includes('&token=')) {
-        const params = new URLSearchParams(hash.slice(1));
-        const token = params.get('token');
-        if (token) {
-            localStorage.setItem('blog_token', token);
-            const cleanHash = hash.split('&token=')[0];
-            window.location.hash = cleanHash || '';
-        }
-    }
-}
-
-document.addEventListener('DOMContentLoaded', async () => {
-    handleOAuthCallback();
-    await loadTemplates();
-    router();
-
-    window.addEventListener('hashchange', router);
-
-    document.querySelector('nav').addEventListener('click', (e) => {
+window.addEventListener('hashchange', navigate);
+document.addEventListener('DOMContentLoaded', () => {
+    navigate();
+    document.querySelector('nav')?.addEventListener('click', e => {
         const link = e.target.closest('[data-nav]');
-        if (link) {
-            const route = link.dataset.nav;
-            if (route === 'home') {
-                e.preventDefault();
-                navigateTo('');
-            }
-        }
+        if (link) document.querySelectorAll('[data-nav]').forEach(a => a.classList.remove('active'));
     });
 });

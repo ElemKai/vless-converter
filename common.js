@@ -1,84 +1,99 @@
-const SITE_CONFIG = {
-    donateUrl: 'https://yoomoney.ru/to/4100119516467414',
-    githubUrl: 'https://github.com/',
-};
-
-const BLOG_API_URL = 'https://spare-macaque-5540.svoboda.deno.net';
-
-function setStatus(type, text) {
-    const sb = document.getElementById('statusBar');
-    if (!sb) return;
-    sb.className = 'status-bar ' + type;
-    const st = document.getElementById('statusText');
-    if (st) st.textContent = text;
-}
-
+const BLOG_API_URL = (() => {
+    try { return localStorage.getItem('blog_api_url') || 'https://spare-macaque-5540.svoboda.deno.net'; }
+    catch { return 'https://spare-macaque-5540.svoboda.deno.net'; }
+})();
+const SITE_CONFIG = { version: '2.0.0' };
 function escapeHtml(text) {
-    const div = document.createElement('div');
-    div.textContent = text;
-    return div.innerHTML;
+    const d = document.createElement('div');
+    d.textContent = text;
+    return d.innerHTML;
+}
+function $(id) { return document.getElementById(id); }
+function setStatus(elId, text, type) {
+    const el = $(elId);
+    if (!el) return;
+    const bar = el.closest('.status-bar') || el;
+    bar.className = 'status-bar' + (type === 'ok' ? ' ok' : type === 'err' ? ' err' : '');
+    const span = bar.querySelector('span') || el;
+    span.textContent = text;
 }
 
-// === HOME PAGE INIT ===
-window.initHome = function() {
-    document.title = 'VLESS Tools — Инструменты нового поколения';
-
-    const starsContainer = document.getElementById('stars');
-    if (starsContainer && starsContainer.children.length === 0) {
-        for (let i = 0; i < 150; i++) {
-            const star = document.createElement('div');
-            star.className = 'star';
-            star.style.left = Math.random() * 100 + '%';
-            star.style.top = Math.random() * 100 + '%';
-            star.style.width = Math.random() * 3 + 'px';
-            star.style.height = star.style.width;
-            star.style.setProperty('--duration', (Math.random() * 3 + 2) + 's');
-            star.style.setProperty('--opacity', Math.random() * 0.7 + 0.3);
-            starsContainer.appendChild(star);
-        }
+function initHome() {
+    if (window._starsInited) return;
+    window._starsInited = true;
+    createStars();
+    createParticles();
+}
+function initConverter() {
+    const app = document.getElementById('app');
+    if (!app) return;
+    const tabs = app.querySelectorAll('.tab-btn');
+    if (!tabs.length) return;
+    tabs.forEach(t => {
+        t.onclick = () => {
+            tabs.forEach(x => x.classList.remove('active'));
+            t.classList.add('active');
+            app.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+            const target = app.querySelector(`#${t.getAttribute('data-tab')}`);
+            if (target) target.classList.add('active');
+        };
+    });
+    initConverterTabs();
+}
+function initChecker() { initCheckerTabs(); }
+function initBlog() { loadBlogPosts(); }
+function initAdmin() {
+    const app = document.getElementById('app');
+    if (!app) return;
+    const tabs = app.querySelectorAll('.tab-btn');
+    if (!tabs.length) return;
+    tabs.forEach(t => {
+        t.onclick = () => {
+            tabs.forEach(x => x.classList.remove('active'));
+            t.classList.add('active');
+            app.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+            const target = app.querySelector(`#${t.getAttribute('data-tab')}`);
+            if (target) target.classList.add('active');
+            if (t.getAttribute('data-tab') === 'local-ssh') initLocalTerminal();
+        };
+    });
+    initAdminTabs();
+    checkBlogAuth();
+    loadBlogEditorList();
+}
+function createStars() {
+    const container = document.getElementById('stars');
+    if (!container) return;
+    for (let i = 0; i < 200; i++) {
+        const star = document.createElement('div');
+        star.className = 'star';
+        star.style.cssText = `
+            left: ${Math.random() * 100}%;
+            top: ${Math.random() * 100}%;
+            width: ${Math.random() * 3 + 1}px;
+            height: ${Math.random() * 3 + 1}px;
+            --duration: ${Math.random() * 3 + 2}s;
+            --opacity: ${Math.random() * 0.5 + 0.3};
+            animation-delay: ${Math.random() * 5}s;
+        `;
+        container.appendChild(star);
     }
-
-    const particlesContainer = document.getElementById('particles');
-    if (particlesContainer && particlesContainer.children.length === 0) {
-        for (let i = 0; i < 30; i++) {
-            const particle = document.createElement('div');
-            particle.className = 'particle';
-            particle.style.left = Math.random() * 100 + '%';
-            particle.style.top = Math.random() * 100 + '%';
-            particle.style.width = Math.random() * 4 + 2 + 'px';
-            particle.style.height = particle.style.width;
-            particle.style.setProperty('--duration', (Math.random() * 10 + 10) + 's');
-            particle.style.setProperty('--moveX', (Math.random() * 100 - 50) + 'px');
-            particle.style.animationDelay = Math.random() * 10 + 's';
-            particlesContainer.appendChild(particle);
-        }
+}
+function createParticles() {
+    const container = document.getElementById('particles');
+    if (!container) return;
+    for (let i = 0; i < 15; i++) {
+        const p = document.createElement('div');
+        p.className = 'particle';
+        p.style.cssText = `
+            left: ${Math.random() * 100}%;
+            bottom: -10px;
+            width: ${Math.random() * 4 + 2}px;
+            height: ${Math.random() * 4 + 2}px;
+            --duration: ${Math.random() * 10 + 10}s;
+            --moveX: ${(Math.random() - 0.5) * 100}px;
+            animation-delay: ${Math.random() * 10}s;
+        `;
+        container.appendChild(p);
     }
-};
-
-// === CONVERTER INIT ===
-window.initConverter = function() {
-    document.title = 'Конвертер — VLESS Tools';
-    if (typeof initConverterTabs === 'function') initConverterTabs();
-    if (typeof initFileUpload === 'function') initFileUpload();
-};
-
-// === CHECKER INIT ===
-window.initChecker = function() {
-    document.title = 'Чекер — VLESS Tools';
-};
-
-// === ADMIN INIT ===
-window.initAdmin = function() {
-    document.title = 'Админ-панель — VLESS Tools';
-    if (typeof initAdminTabs === 'function') initAdminTabs();
-    if (typeof detectMyIp === 'function') detectMyIp();
-    if (typeof renderClients === 'function') renderClients();
-    if (typeof initTerminal === 'function') initTerminal();
-    if (typeof checkBlogAuth === 'function') checkBlogAuth();
-};
-
-// === BLOG INIT ===
-window.initBlog = function() {
-    document.title = 'Блог — VLESS Tools';
-    if (typeof loadBlogPosts === 'function') loadBlogPosts();
-};
+}
