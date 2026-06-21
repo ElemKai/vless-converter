@@ -14,8 +14,7 @@ let speedTestAbortController = null;
 
 // ==================== ИНИЦИАЛИЗАЦИЯ ====================
 
-document.addEventListener('DOMContentLoaded', () => {
-    // Вкладки
+function initAdminTabs() {
     document.querySelectorAll('.tab-btn').forEach(btn => {
         btn.addEventListener('click', function() {
             const tabName = this.dataset.tab;
@@ -29,11 +28,7 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         });
     });
-    
-    detectMyIp();
-    renderClients();
-    initTerminal();
-    
+
     window.addEventListener('resize', () => {
         if (sshFitAddon) sshFitAddon.fit();
         if (sshConnected && sshWebSocket && sshWebSocket.readyState === WebSocket.OPEN) {
@@ -44,7 +39,7 @@ document.addEventListener('DOMContentLoaded', () => {
             }));
         }
     });
-});
+}
 
 // ==================== IP TOOLS ====================
 
@@ -1027,8 +1022,204 @@ async function pingClient(id) {
     }
 }
 
-function escapeHtml(text) {
-    const div = document.createElement('div');
-    div.textContent = text;
-    return div.innerHTML;
+// ==================== BLOG EDITOR ====================
+
+let blogAuthToken = localStorage.getItem('blog_token');
+let currentEditPostId = null;
+
+function getBlogApiUrl() {
+    if (typeof BLOG_API_URL !== 'undefined' && BLOG_API_URL) return BLOG_API_URL;
+    return 'https://spare-macaque-5540.svoboda.deno.net';
+}
+
+async function checkBlogAuth() {
+    const statusDiv = document.getElementById('blog-auth-status');
+    const editorSection = document.getElementById('blog-editor-section');
+
+    if (!statusDiv || !editorSection) return;
+
+    blogAuthToken = localStorage.getItem('blog_token');
+
+    if (!blogAuthToken) {
+        statusDiv.innerHTML = `
+            <p style="color:var(--white-muted);">Войдите через GitHub для управления блогом.</p>
+            <button class="btn btn-blue" onclick="loginWithGithub()" id="blog-login-btn" style="margin-top:12px;">[ Войти через GitHub ]</button>
+        `;
+        editorSection.style.display = 'none';
+        return;
+    }
+
+    try {
+        const res = await fetch(`${getBlogApiUrl()}/api/me`, {
+            headers: { 'Authorization': `Bearer ${blogAuthToken}` }
+        });
+
+        if (!res.ok) {
+            blogAuthToken = null;
+            localStorage.removeItem('blog_token');
+            checkBlogAuth();
+            return;
+        }
+
+        const user = await res.json();
+        statusDiv.innerHTML = `<p style="color:var(--gold-primary);">✓ Вы вошли как <strong>${escapeHtml(user.login)}</strong></p>
+            <button class="btn btn-ghost" onclick="logoutBlog()" style="margin-top:8px;">[ Выйти ]</button>`;
+        editorSection.style.display = 'block';
+        loadBlogEditorList();
+    } catch (e) {
+        statusDiv.innerHTML = `<p style="color:var(--white-muted);">Ошибка проверки авторизации.</p>
+            <button class="btn btn-blue" onclick="loginWithGithub()" style="margin-top:12px;">[ Войти через GitHub ]</button>`;
+        editorSection.style.display = 'none';
+    }
+}
+
+function loginWithGithub() {
+    const currentUrl = window.location.href.split('&token=')[0];
+    const redirectUrl = currentUrl.startsWith('file://')
+        ? 'https://ssh-svoboda.ru/'
+        : currentUrl;
+    const authUrl = `${getBlogApiUrl()}/auth/github/login?redirect=${encodeURIComponent(redirectUrl)}`;
+    window.location.href = authUrl;
+}
+
+function logoutBlog() {
+    blogAuthToken = null;
+    localStorage.removeItem('blog_token');
+    checkBlogAuth();
+}
+
+function generateSlug() {
+    const title = document.getElementById('blog-post-title').value.trim();
+    if (!title) return;
+    const slug = title.toLowerCase()
+        .replace(/[^\w\s-]/g, '')
+        .replace(/[\s_]+/g, '-')
+        .replace(/^-+|-+$/g, '');
+    document.getElementById('blog-post-slug').value = slug;
+}
+
+async function saveBlogPost() {
+    const title = document.getElementById('blog-post-title').value.trim();
+    const content = document.getElementById('blog-post-content').value.trim();
+    const tags = document.getElementById('blog-post-tags').value.split(',').map(t => t.trim()).filter(Boolean);
+    let slug = document.getElementById('blog-post-slug').value.trim();
+    const editId = document.getElementById('blog-editor-id').textContent;
+    const statusEl = document.getElementById('blog-editor-status-text');
+
+    if (!title || !content) {
+        statusEl.textContent = '❌ Заголовок и содержимое обязательны';
+        return;
+    }
+
+    if (!slug) {
+        slug = title.toLowerCase().replace(/[^\w\s-]/g, '').replace(/[\s_]+/g, '-').replace(/^-+|-+$/g, '');
+    }
+
+    const excerpt = content.replace(/[#*`\[\]]/g, '').substring(0, 200).trim();
+
+    const postData = { title, content, slug, tags, excerpt };
+
+    statusEl.textContent = '⏳ Сохранение...';
+
+    try {
+        const method = editId ? 'PUT' : 'POST';
+        const url = editId ? `${getBlogApiUrl()}/api/posts/${editId}` : `${getBlogApiUrl()}/api/posts`;
+
+        const res = await fetch(url, {
+            method,
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${blogAuthToken}`
+            },
+            body: JSON.stringify(postData)
+        });
+
+        if (!res.ok) {
+            const err = await res.json().catch(() => ({ error: 'HTTP ' + res.status }));
+            throw new Error(err.error || 'Ошибка сохранения');
+        }
+
+        statusEl.textContent = '✓ Пост сохранён';
+        clearBlogEditor();
+        loadBlogEditorList();
+    } catch (e) {
+        statusEl.textContent = '❌ ' + e.message;
+    }
+}
+
+async function loadBlogEditorList() {
+    const list = document.getElementById('blog-editor-list');
+    if (!list) return;
+
+    try {
+        const res = await fetch(`${getBlogApiUrl()}/api/posts`);
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        const posts = await res.json();
+
+        if (!posts || posts.length === 0) {
+            list.innerHTML = '<p style="color:var(--white-muted);">Постов пока нет.</p>';
+            return;
+        }
+
+        list.innerHTML = posts.map(post => `
+            <div class="blog-editor-item">
+                <div class="blog-editor-item-info">
+                    <div class="blog-editor-item-title">${escapeHtml(post.title)}</div>
+                    <div class="blog-editor-item-meta">${new Date(post.createdAt).toLocaleDateString('ru')} · ${post.slug}</div>
+                </div>
+                <div class="blog-editor-item-actions">
+                    <button class="btn btn-ghost" onclick="editBlogPost('${post._id || post.id}')">[ ✏️ ]</button>
+                    <button class="btn btn-ghost" onclick="deleteBlogPost('${post._id || post.id}')">[ 🗑️ ]</button>
+                </div>
+            </div>
+        `).join('');
+    } catch (e) {
+        list.innerHTML = `<p style="color:var(--white-muted);">Ошибка загрузки: ${escapeHtml(e.message)}</p>`;
+    }
+}
+
+async function editBlogPost(id) {
+    try {
+        const res = await fetch(`${getBlogApiUrl()}/api/posts/${id}`);
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        const post = await res.json();
+
+        document.getElementById('blog-post-title').value = post.title;
+        document.getElementById('blog-post-content').value = post.content;
+        document.getElementById('blog-post-tags').value = (post.tags || []).join(', ');
+        document.getElementById('blog-post-slug').value = post.slug;
+        document.getElementById('blog-editor-id').textContent = post._id || post.id;
+        document.getElementById('blog-save-btn').textContent = '[ Обновить ]';
+        document.getElementById('blog-editor-status-text').textContent = 'редактирование "' + post.title + '"';
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+    } catch (e) {
+        alert('Ошибка: ' + e.message);
+    }
+}
+
+async function deleteBlogPost(id) {
+    if (!confirm('Удалить пост?')) return;
+
+    try {
+        const res = await fetch(`${getBlogApiUrl()}/api/posts/${id}`, {
+            method: 'DELETE',
+            headers: { 'Authorization': `Bearer ${blogAuthToken}` }
+        });
+
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        loadBlogEditorList();
+    } catch (e) {
+        alert('Ошибка: ' + e.message);
+    }
+}
+
+function clearBlogEditor() {
+    document.getElementById('blog-post-title').value = '';
+    document.getElementById('blog-post-content').value = '';
+    document.getElementById('blog-post-tags').value = '';
+    document.getElementById('blog-post-slug').value = '';
+    document.getElementById('blog-editor-id').textContent = '';
+    document.getElementById('blog-save-btn').textContent = '[ Опубликовать ]';
+    document.getElementById('blog-editor-status-text').textContent = 'готово';
+    currentEditPostId = null;
 }

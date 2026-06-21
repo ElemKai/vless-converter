@@ -8,7 +8,7 @@ const CUSTOM_PROXY_URL = 'https://vless-proxy.kaibreofficial.workers.dev';
 
 // ==================== ИНИЦИАЛИЗАЦИЯ ====================
 
-function initTabs() {
+function initConverterTabs() {
     console.log('[INIT] Инициализация вкладок');
     
     document.querySelectorAll('.tab-btn').forEach(btn => {
@@ -92,16 +92,6 @@ function initFileUpload() {
             handleFile(files[0]);
         }
     });
-}
-
-// Запуск
-if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', () => {        initTabs();
-        initFileUpload();
-    });
-} else {
-    initTabs();
-    initFileUpload();
 }
 
 // ==================== СТАТУС И DEBUG ====================
