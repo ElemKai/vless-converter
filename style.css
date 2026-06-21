@@ -1930,3 +1930,516 @@ footer {
     text-decoration: none;
     border-bottom: 1px dashed currentColor;
 }
+
+/* ===== ADMIN PAGE STYLES ===== */
+
+/* IP Info Grid */
+.ip-info-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 12px;
+    margin-bottom: 16px;
+}
+
+.ip-info-item {
+    background: rgba(0,0,0,0.3);
+    border: 1px solid rgba(56,189,248,0.15);
+    border-radius: 10px;
+    padding: 14px;
+}
+
+.ip-info-label {
+    font-family: monospace;
+    font-size: 10px;
+    color: #38bdf8;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    margin-bottom: 4px;
+}
+
+.ip-info-value {
+    font-family: monospace;
+    font-size: 14px;
+    color: #22c55e;
+    font-weight: 600;
+    word-break: break-all;
+}
+
+.ip-result-block {
+    margin-top: 16px;
+    padding: 16px;
+    background: rgba(0,0,0,0.3);
+    border: 1px solid rgba(56,189,248,0.2);
+    border-radius: 10px;
+}
+
+.ip-loading {
+    text-align: center;
+    color: #38bdf8;
+    font-family: monospace;
+}
+
+.ip-error {
+    color: #ef4444;
+    font-family: monospace;
+}
+
+/* Speed Test */
+.speed-test-panel {
+    text-align: center;
+    padding: 20px;
+}
+
+.speed-gauge {
+    margin-bottom: 24px;
+}
+
+.speed-value {
+    font-family: monospace;
+    font-size: 72px;
+    font-weight: 800;
+    background: linear-gradient(90deg, #38bdf8, #22c55e);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    line-height: 1;
+}
+
+.speed-unit {
+    font-family: monospace;
+    font-size: 14px;
+    color: #9ca3af;
+    text-transform: uppercase;
+    letter-spacing: 2px;
+    margin-top: 4px;
+}
+
+.speed-label {
+    font-family: monospace;
+    font-size: 12px;
+    color: #6b7280;
+    margin-top: 8px;
+}
+
+.speed-stats {
+    display: flex;
+    justify-content: center;
+    gap: 30px;
+    margin-bottom: 24px;
+    flex-wrap: wrap;
+}
+
+.speed-stat {
+    text-align: center;
+}
+
+.speed-stat-label {
+    font-family: monospace;
+    font-size: 11px;
+    color: #6b7280;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    margin-bottom: 4px;
+}
+
+.speed-stat-value {
+    font-family: monospace;
+    font-size: 18px;
+    color: #22c55e;
+    font-weight: 700;
+}
+
+/* SSH Terminal */
+.ssh-connect-form {
+    margin-bottom: 16px;
+}
+
+.ssh-form-row {
+    display: flex;
+    gap: 12px;
+    margin-bottom: 12px;
+    flex-wrap: wrap;
+}
+
+.ssh-form-field {
+    flex: 1;
+    min-width: 150px;
+}
+
+.terminal-box {
+    background: #0b1120;
+    border: 1px solid rgba(56,189,248,0.2);
+    border-radius: 10px;
+    padding: 10px;
+    min-height: 400px;
+    margin-top: 16px;
+}
+
+.terminal-box .xterm {
+    height: 100%;
+}
+
+/* Clients */
+.client-form {
+    margin-bottom: 16px;
+}
+
+.clients-list {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+    gap: 16px;
+}
+
+.clients-empty {
+    grid-column: 1 / -1;
+    text-align: center;
+    padding: 40px;
+    color: #6b7280;
+    font-family: monospace;
+    font-size: 13px;
+    border: 1px dashed rgba(255,255,255,0.1);
+    border-radius: 10px;
+}
+
+.client-card {
+    background: rgba(0,0,0,0.4);
+    border: 1px solid rgba(34,197,94,0.2);
+    border-radius: 12px;
+    padding: 16px;
+    transition: 0.3s;
+}
+
+.client-card:hover {
+    border-color: rgba(34,197,94,0.5);
+    background: rgba(34,197,94,0.05);
+}
+
+.client-card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 12px;
+}
+
+.client-name {
+    font-family: monospace;
+    font-size: 16px;
+    font-weight: 700;
+    color: #22c55e;
+}
+
+.client-actions-top {
+    display: flex;
+    gap: 6px;
+}
+
+.client-actions-top .copy-item-btn {
+    padding: 4px 8px;
+    font-size: 11px;
+}
+
+.client-info {
+    margin-bottom: 12px;
+}
+
+.client-info-row {
+    display: flex;
+    justify-content: space-between;
+    padding: 4px 0;
+    font-family: monospace;
+    font-size: 12px;
+}
+
+.client-info-label {
+    color: #6b7280;
+}
+
+.client-info-value {
+    color: #38bdf8;
+}
+
+.client-buttons {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.client-buttons .btn {
+    flex: 1;
+    min-width: 80px;
+    padding: 8px 12px;
+    font-size: 11px;
+}
+
+@media (max-width: 600px) {
+    .ssh-form-row {
+        flex-direction: column;
+    }
+    
+    .speed-value {
+        font-size: 48px;
+    }
+    
+    .clients-list {
+        grid-template-columns: 1fr;
+    }
+}
+
+/* ===== ADMIN PAGE STYLES ===== */
+
+/* IP Info Grid */
+.ip-info-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 12px;
+    margin-bottom: 16px;
+}
+
+.ip-info-item {
+    background: rgba(0,0,0,0.3);
+    border: 1px solid rgba(56,189,248,0.15);
+    border-radius: 10px;
+    padding: 14px;
+}
+
+.ip-info-label {
+    font-family: monospace;
+    font-size: 10px;
+    color: #38bdf8;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    margin-bottom: 4px;
+}
+
+.ip-info-value {
+    font-family: monospace;
+    font-size: 14px;
+    color: #22c55e;
+    font-weight: 600;
+    word-break: break-all;
+}
+
+.ip-result-block {
+    margin-top: 16px;
+    padding: 16px;
+    background: rgba(0,0,0,0.3);
+    border: 1px solid rgba(56,189,248,0.2);
+    border-radius: 10px;
+}
+
+.ip-loading {
+    text-align: center;
+    color: #38bdf8;
+    font-family: monospace;
+}
+
+.ip-error {
+    color: #ef4444;
+    font-family: monospace;
+}
+
+/* Speed Test */
+.speed-test-panel {
+    text-align: center;
+    padding: 20px;
+}
+
+.speed-gauge {
+    margin-bottom: 24px;
+}
+
+.speed-value {
+    font-family: monospace;
+    font-size: 72px;
+    font-weight: 800;
+    background: linear-gradient(90deg, #38bdf8, #22c55e);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    line-height: 1;
+}
+
+.speed-unit {
+    font-family: monospace;
+    font-size: 14px;
+    color: #9ca3af;
+    text-transform: uppercase;
+    letter-spacing: 2px;
+    margin-top: 4px;
+}
+
+.speed-label {
+    font-family: monospace;
+    font-size: 12px;
+    color: #6b7280;
+    margin-top: 8px;
+}
+
+.speed-stats {
+    display: flex;
+    justify-content: center;
+    gap: 30px;
+    margin-bottom: 24px;
+    flex-wrap: wrap;
+}
+
+.speed-stat {
+    text-align: center;
+}
+
+.speed-stat-label {
+    font-family: monospace;
+    font-size: 11px;
+    color: #6b7280;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    margin-bottom: 4px;
+}
+
+.speed-stat-value {
+    font-family: monospace;
+    font-size: 18px;
+    color: #22c55e;
+    font-weight: 700;
+}
+
+/* SSH Terminal */
+.ssh-connect-form {
+    margin-bottom: 16px;
+}
+
+.ssh-form-row {
+    display: flex;
+    gap: 12px;
+    margin-bottom: 12px;
+    flex-wrap: wrap;
+}
+
+.ssh-form-field {
+    flex: 1;
+    min-width: 150px;
+}
+
+.terminal-box {
+    background: #0b1120;
+    border: 1px solid rgba(56,189,248,0.2);
+    border-radius: 10px;
+    padding: 10px;
+    min-height: 400px;
+    margin-top: 16px;
+}
+
+.terminal-box .xterm {
+    height: 100%;
+}
+
+/* Clients */
+.client-form {
+    margin-bottom: 16px;
+}
+
+.clients-list {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+    gap: 16px;
+}
+
+.clients-empty {
+    grid-column: 1 / -1;
+    text-align: center;
+    padding: 40px;
+    color: #6b7280;
+    font-family: monospace;
+    font-size: 13px;
+    border: 1px dashed rgba(255,255,255,0.1);
+    border-radius: 10px;
+}
+
+.client-card {
+    background: rgba(0,0,0,0.4);
+    border: 1px solid rgba(34,197,94,0.2);
+    border-radius: 12px;
+    padding: 16px;
+    transition: 0.3s;
+}
+
+.client-card:hover {
+    border-color: rgba(34,197,94,0.5);
+    background: rgba(34,197,94,0.05);
+}
+
+.client-card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 12px;
+}
+
+.client-name {
+    font-family: monospace;
+    font-size: 16px;
+    font-weight: 700;
+    color: #22c55e;
+}
+
+.client-actions-top {
+    display: flex;
+    gap: 6px;
+}
+
+.client-actions-top .copy-item-btn {
+    padding: 4px 8px;
+    font-size: 11px;
+}
+
+.client-info {
+    margin-bottom: 12px;
+}
+
+.client-info-row {
+    display: flex;
+    justify-content: space-between;
+    padding: 4px 0;
+    font-family: monospace;
+    font-size: 12px;
+}
+
+.client-info-label {
+    color: #6b7280;
+}
+
+.client-info-value {
+    color: #38bdf8;
+}
+
+.client-buttons {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.client-buttons .btn {
+    flex: 1;
+    min-width: 80px;
+    padding: 8px 12px;
+    font-size: 11px;
+}
+
+/* Admin Responsive */
+@media (max-width: 600px) {
+    .ssh-form-row {
+        flex-direction: column;
+    }
+    
+    .speed-value {
+        font-size: 48px;
+    }
+    
+    .clients-list {
+        grid-template-columns: 1fr;
+    }
+    
+    .ip-info-grid {
+        grid-template-columns: 1fr;
+    }
+}
