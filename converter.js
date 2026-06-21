@@ -24,96 +24,129 @@ async function convertSubscription() {
     const url = input.value.trim();
     if (!url) { setStatus('conv-status', 'Введите URL подписки', 'err'); return; }
 
+    const useLocal = document.getElementById('conv-local-proxy')?.checked;
+
     setStatus('conv-status', 'Загрузка подписки...', 'ok');
     resultSection.style.display = 'none';
     resultDiv.innerHTML = '';
     converterResult = [];
 
-    const apiUrl = getBlogApiUrl();
-    const proxyUrl = `${apiUrl}/?url=${encodeURIComponent(url)}`;
+    let text;
+    let userInfo, profileTitle;
 
-    try {
-        const resp = await fetch(proxyUrl);
-        if (!resp.ok) {
-            const text = await resp.text();
-            throw new Error(`HTTP ${resp.status}: ${text.substring(0, 200)}`);
-        }
-
-        const text = await resp.text();
-
-        // Parse subscription info from headers
-        const userInfo = resp.headers.get('subscription-userinfo');
-        const profileTitle = resp.headers.get('profile-title');
-
-        // Parse VLESS links
-        const lines = text.split('\n').map(l => l.trim()).filter(Boolean);
-        for (const line of lines) {
-            if (line.startsWith('vless://')) {
-                converterResult.push(line);
+    if (useLocal) {
+        // Use local Python proxy (residential IP — not blocked)
+        try {
+            const ws = new WebSocket('ws://127.0.0.1:8888?mode=fetch');
+            const result = await new Promise((resolve, reject) => {
+                ws.onopen = () => ws.send(JSON.stringify({ url }));
+                ws.onmessage = e => resolve(JSON.parse(e.data));
+                ws.onerror = () => reject(new Error('ws://127.0.0.1:8888 недоступен. Запустите: python ssh-proxy.py'));
+                setTimeout(() => { if (ws.readyState <= 1) { ws.close(); reject(new Error('Таймаут')); } }, 15000);
+            });
+            if (result.error) throw new Error(result.error);
+            if (result.status >= 400) throw new Error(`HTTP ${result.status}`);
+            text = result.body;
+            if (result.headers) {
+                userInfo = result.headers['subscription-userinfo'] || '';
+                profileTitle = result.headers['profile-title'] || '';
             }
-        }
-
-        if (converterResult.length === 0) {
-            // Maybe it's base64 encoded
-            try {
-                const decoded = atob(text.replace(/\s/g, ''));
-                const decodedLines = decoded.split('\n').map(l => l.trim()).filter(Boolean);
-                for (const line of decodedLines) {
-                    if (line.startsWith('vless://')) converterResult.push(line);
-                }
-            } catch {}
-        }
-
-        if (converterResult.length === 0) {
-            resultDiv.innerHTML = '<p style="color:var(--red);">Не найдено VLESS ссылок в подписке</p>';
+        } catch (e) {
+            resultDiv.innerHTML = `<p style="color:var(--red);">Локальный прокси: ${escapeHtml(e.message)}</p>
+                <p style="color:var(--white-muted);font-size:13px;">Запустите: <code style="background:rgba(255,255,255,0.1);padding:2px 6px;border-radius:3px;">python ssh-proxy.py</code></p>`;
             resultSection.style.display = 'block';
-            setStatus('conv-status', 'Не найдено VLESS ссылок', 'err');
+            setStatus('conv-status', 'Ошибка локального прокси', 'err');
             return;
         }
+    } else {
+        const apiUrl = getBlogApiUrl();
+        const proxyUrl = `${apiUrl}/?url=${encodeURIComponent(url)}`;
 
-        let html = '';
-        if (userInfo) {
-            const parts = Object.fromEntries(userInfo.split(';').map(s => {
-                const [k, v] = s.trim().split('=');
-                return [k, v];
-            }));
-            html += `<div style="margin-bottom:12px;font-size:12px;color:var(--white-muted);">
-                📊 Использовано: ${formatBytes(parts.upload || 0)} ↑ / ${formatBytes(parts.download || 0)} ↓
-                ${parts.total ? `· Всего: ${formatBytes(parts.total)}` : ''}
-                ${parts.expire ? `· Истекает: ${new Date(parts.expire * 1000).toLocaleDateString()}` : ''}
-            </div>`;
+        try {
+            const resp = await fetch(proxyUrl);
+            if (!resp.ok) {
+                const body = await resp.text();
+                if (resp.status === 403) {
+                    resultDiv.innerHTML = `<p style="color:var(--red);">HTTP 403 — провайдер блокирует запросы с дата-центра Deno Deploy.</p>
+                        <p style="color:var(--white-muted);font-size:13px;margin-top:8px;">✅ Включите <strong>"Локальный прокси"</strong> ниже и запустите <code style="background:rgba(255,255,255,0.1);padding:2px 6px;border-radius:3px;">python ssh-proxy.py</code></p>`;
+                    resultSection.style.display = 'block';
+                    setStatus('conv-status', 'Блокировка провайдера', 'err');
+                    return;
+                }
+                throw new Error(`HTTP ${resp.status}: ${body.substring(0, 200)}`);
+            }
+            text = await resp.text();
+            userInfo = resp.headers.get('subscription-userinfo');
+            profileTitle = resp.headers.get('profile-title');
+        } catch (e) {
+            resultDiv.innerHTML = `<p style="color:var(--red);">Ошибка: ${escapeHtml(e.message)}</p>`;
+            resultSection.style.display = 'block';
+            setStatus('conv-status', 'Ошибка загрузки', 'err');
+            return;
         }
-        if (profileTitle) {
-            html += `<div style="margin-bottom:12px;font-size:13px;color:var(--gold);">📁 ${escapeHtml(decodeURIComponent(profileTitle))}</div>`;
-        }
-        html += `<div style="margin-bottom:8px;font-size:12px;color:var(--white-muted);">Найдено серверов: ${converterResult.length}</div>`;
-        html += '<div class="vless-list">';
-
-        for (const link of converterResult) {
-            const parsed = parseVlessLink(link);
-            html += `<div class="vless-item" onclick="copyVless('${escapeHtml(link)}')" title="Нажмите чтобы скопировать">
-                <div class="vless-remark">${escapeHtml(parsed.remark || 'Без имени')}</div>
-                <div style="color:var(--white-muted);font-size:11px;">${escapeHtml(parsed.server || '')} · ${parsed.port || ''}</div>
-                <div style="color:var(--white-muted);font-size:11px;">${parsed.type || ''} · ${parsed.network || ''}${parsed.security ? ' · ' + parsed.security : ''}${parsed.encryption ? ' · ' + parsed.encryption : ''}</div>
-            </div>`;
-        }
-
-        html += '</div>';
-        html += `<div style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap;">
-            <button class="btn btn-ghost" onclick="copyAllVless()" style="font-size:12px;">[ Копировать все ]</button>
-            <button class="btn btn-ghost" onclick="exportClash()" style="font-size:12px;">[ Koala Clash YAML ]</button>
-            <button class="btn btn-ghost" onclick="exportHapp()" style="font-size:12px;">[ Happ JSON ]</button>
-        </div>`;
-
-        resultDiv.innerHTML = html;
-        resultSection.style.display = 'block';
-        setStatus('conv-status', `Готово: ${converterResult.length} серверов`, 'ok');
-
-    } catch (e) {
-        resultDiv.innerHTML = `<p style="color:var(--red);">Ошибка: ${escapeHtml(e.message)}</p>`;
-        resultSection.style.display = 'block';
-        setStatus('conv-status', 'Ошибка загрузки', 'err');
     }
+
+    const lines = text.split('\n').map(l => l.trim()).filter(Boolean);
+    for (const line of lines) {
+        if (line.startsWith('vless://')) {
+            converterResult.push(line);
+        }
+    }
+
+    if (converterResult.length === 0) {
+        try {
+            const decoded = atob(text.replace(/\s/g, ''));
+            const decodedLines = decoded.split('\n').map(l => l.trim()).filter(Boolean);
+            for (const line of decodedLines) {
+                if (line.startsWith('vless://')) converterResult.push(line);
+            }
+        } catch {}
+    }
+
+    if (converterResult.length === 0) {
+        resultDiv.innerHTML = '<p style="color:var(--red);">Не найдено VLESS ссылок в подписке</p>';
+        resultSection.style.display = 'block';
+        setStatus('conv-status', 'Не найдено VLESS ссылок', 'err');
+        return;
+    }
+
+    let html = '';
+    if (userInfo) {
+        const parts = Object.fromEntries(userInfo.split(';').map(s => {
+            const [k, v] = s.trim().split('=');
+            return [k, v];
+        }));
+        html += `<div style="margin-bottom:12px;font-size:12px;color:var(--white-muted);">
+            📊 Использовано: ${formatBytes(parts.upload || 0)} ↑ / ${formatBytes(parts.download || 0)} ↓
+            ${parts.total ? `· Всего: ${formatBytes(parts.total)}` : ''}
+            ${parts.expire ? `· Истекает: ${new Date(parts.expire * 1000).toLocaleDateString()}` : ''}
+        </div>`;
+    }
+    if (profileTitle) {
+        html += `<div style="margin-bottom:12px;font-size:13px;color:var(--gold);">📁 ${escapeHtml(decodeURIComponent(profileTitle))}</div>`;
+    }
+    html += `<div style="margin-bottom:8px;font-size:12px;color:var(--white-muted);">Найдено серверов: ${converterResult.length}</div>`;
+    html += '<div class="vless-list">';
+
+    for (const link of converterResult) {
+        const parsed = parseVlessLink(link);
+        html += `<div class="vless-item" onclick="copyVless('${escapeHtml(link)}')" title="Нажмите чтобы скопировать">
+            <div class="vless-remark">${escapeHtml(parsed.remark || 'Без имени')}</div>
+            <div style="color:var(--white-muted);font-size:11px;">${escapeHtml(parsed.server || '')} · ${parsed.port || ''}</div>
+            <div style="color:var(--white-muted);font-size:11px;">${parsed.type || ''} · ${parsed.network || ''}${parsed.security ? ' · ' + parsed.security : ''}${parsed.encryption ? ' · ' + parsed.encryption : ''}</div>
+        </div>`;
+    }
+
+    html += '</div>';
+    html += `<div style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap;">
+        <button class="btn btn-ghost" onclick="copyAllVless()" style="font-size:12px;">[ Копировать все ]</button>
+        <button class="btn btn-ghost" onclick="exportClash()" style="font-size:12px;">[ Koala Clash YAML ]</button>
+        <button class="btn btn-ghost" onclick="exportHapp()" style="font-size:12px;">[ Happ JSON ]</button>
+    </div>`;
+
+    resultDiv.innerHTML = html;
+    resultSection.style.display = 'block';
+    setStatus('conv-status', `Готово: ${converterResult.length} серверов`, 'ok');
 }
 
 function parseVlessLink(link) {

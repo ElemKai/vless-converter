@@ -51,6 +51,10 @@
                     <input type="text" id="conv-url" class="subscription-url-input" placeholder="https://example.com/sub/uuid" onchange="saveConvUrl()">
                     <button class="btn btn-blue" onclick="convertSubscription()">[ Конвертировать ]</button>
                 </div>
+                <label style="display:flex;align-items:center;gap:8px;margin-top:8px;font-size:12px;color:var(--white-muted);cursor:pointer;">
+                    <input type="checkbox" id="conv-local-proxy" style="width:auto;">
+                    Локальный прокси (<code style="background:rgba(255,255,255,0.1);padding:1px 5px;border-radius:3px;">python ssh-proxy.py</code>)
+                </label>
 
             </div>
             <div class="subscription-divider"><span>результат</span></div>
