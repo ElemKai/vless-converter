@@ -113,8 +113,15 @@ function initAdmin() {
             ipBtn.disabled = true;
             ipResult.textContent = 'Поиск...';
             try {
-                const resp = await fetch(`http://ip-api.com/json/${encodeURIComponent(ip)}?fields=status,message,country,regionName,city,isp,org,as,proxy,hosting,query`);
-                const data = await resp.json();
+                const proxyUrl = 'https://spare-macaque-5540.svoboda.deno.net/api/proxy';
+                const target = `http://ip-api.com/json/${encodeURIComponent(ip)}?fields=status,message,country,regionName,city,isp,org,as,proxy,hosting,query`;
+                const resp = await fetch(`${proxyUrl}?url=${encodeURIComponent(target)}`);
+                const text = await resp.text();
+                let data;
+                try { data = JSON.parse(text); } catch { data = { status: 'fail', message: text }; }
+                if (data.body !== undefined) {
+                    try { data = JSON.parse(data.body); } catch { data = { status: 'fail', message: data.body }; }
+                }
                 ipResult.textContent = JSON.stringify(data, null, 2);
             } catch (e) {
                 ipResult.textContent = 'Ошибка: ' + e.message;
