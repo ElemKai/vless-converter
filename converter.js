@@ -16,36 +16,43 @@ function parseVless(link) {
     } catch { return null; }
 }
 
-function parseSubscription(text) {
+function parseYamlProxies(body) {
     const servers = [];
-    // Try base64-decode the entire body first
+    // Split by `- name:` to get individual proxy blocks
+    const blocks = body.split(/\n\s*-\s*name:/);
+    for (let block of blocks) {
+        if (!/type:\s*vless/.test(block)) continue;
+        // Ensure first block doesn't need the split prefix
+        if (blocks.indexOf(block) > 0) block = 'name:' + block;
+        const name = (block.match(/name:\s*"([^"]+)"/) || [])[1]
+            || (block.match(/name:\s*'([^']+)'/) || [])[1]
+            || (block.match(/name:\s*(\S+)/) || [])[1] || '';
+        const server = (block.match(/server:\s*(\S+)/) || [])[1] || '';
+        const port = (block.match(/port:\s*(\d+)/) || [])[1] || '';
+        const uuid = (block.match(/uuid:\s*(\S+)/) || [])[1] || '';
+        if (!server || !port || !uuid || server === '0.0.0.0') continue;
+        const network = (block.match(/network:\s*(\S+)/) || [])[1] || 'tcp';
+        const tlsVal = (block.match(/tls:\s*(true|false)/) || [])[1];
+        const security = tlsVal === 'true' ? 'tls' : 'none';
+        const encryption = (block.match(/encryption:\s*(\S+)/) || [])[1] || 'none';
+        const flow = (block.match(/flow:\s*(\S+)/) || [])[1] || '';
+        const sni = (block.match(/servername:\s*(\S+)/) || [])[1] || '';
+        const fp = (block.match(/client-fingerprint:\s*(\S+)/) || [])[1] || '';
+        const pbk = (block.match(/public-key:\s*(\S+)/) || [])[1] || '';
+        const sid = (block.match(/short-id:\s*(\S+)/) || [])[1] || '';
+        servers.push({ id: uuid, addr: server, port, type: network, security, encryption, flow, sni, fp, pbk, sid, remark: name });
+    }
+    return servers;
+}
+
+function parseSubscription(text) {
     let body = text;
     try { body = atob(text.replace(/\s/g, '')); } catch {}
-    // Try Clash YAML proxy parsing
-    const yamlProxies = body.match(/^\s*-\s*name:\s*"([^"]+)"\s*\n\s*type:\s*vless\s*\n\s*server:\s*(\S+)\s*\n\s*port:\s*(\d+)\s*\n\s*uuid:\s*(\S+)/gm);
-    if (yamlProxies) {
-        for (const block of yamlProxies) {
-            const nameMatch = block.match(/name:\s*"([^"]+)"/);
-            const serverMatch = block.match(/server:\s*(\S+)/);
-            const portMatch = block.match(/port:\s*(\d+)/);
-            const uuidMatch = block.match(/uuid:\s*(\S+)/);
-            const netMatch = block.match(/network:\s*(\S+)/);
-            const tlsMatch = block.match(/tls:\s*(true|false)/);
-            const sniMatch = block.match(/servername:\s*(\S+)/);
-            if (serverMatch && portMatch && uuidMatch && serverMatch[1] !== '0.0.0.0') {
-                servers.push({
-                    id: uuidMatch[1], addr: serverMatch[1], port: portMatch[1],
-                    type: netMatch ? netMatch[1] : 'tcp',
-                    security: tlsMatch && tlsMatch[1] === 'true' ? 'tls' : 'none',
-                    encryption: 'none', flow: '', sni: sniMatch ? sniMatch[1] : '',
-                    fp: '', pbk: '', sid: '',
-                    remark: nameMatch ? nameMatch[1] : '',
-                });
-            }
-        }
-        if (servers.length > 0) return servers;
-    }
-    // Line-by-line parsing
+    // Try Clash YAML parsing first
+    const yamlServers = parseYamlProxies(body);
+    if (yamlServers.length > 0) return yamlServers;
+    // Line-by-line VLESS URL parsing
+    const servers = [];
     const links = body.split(/[\r\n]+/).filter(l => l.trim());
     for (const raw of links) {
         let decoded = raw.trim();
@@ -53,10 +60,7 @@ function parseSubscription(text) {
             const b64 = atob(decoded);
             if (b64.includes('vless://')) {
                 const inner = b64.split(/[\r\n]+/).filter(l => l.trim());
-                for (const l of inner) {
-                    const s = parseVless(l);
-                    if (s) servers.push(s);
-                }
+                for (const l of inner) { const s = parseVless(l); if (s) servers.push(s); }
                 continue;
             }
         } catch {}
@@ -93,7 +97,7 @@ function renderVlessList(servers, container) {
         `;
         div.addEventListener('click', () => {
             navigator.clipboard.writeText(
-                `vless://${s.id}@${s.addr}:${s.port}?type=${s.type}&security=${s.security}&encryption=${s.encryption}${s.sni ? '&sni='+s.sni : ''}${s.fp ? '&fp='+s.fp : ''}${s.pbk ? '&pbk='+s.pbk : ''}${s.sid ? '&sid='+s.sid : ''}#${encodeURIComponent(s.remark)}`
+                `vless://${s.id}@${s.addr}:${s.port}?type=${s.type}&security=${s.security}&encryption=${s.encryption}${s.flow ? '&flow='+s.flow : ''}${s.sni ? '&sni='+s.sni : ''}${s.fp ? '&fp='+s.fp : ''}${s.pbk ? '&pbk='+s.pbk : ''}${s.sid ? '&sid='+s.sid : ''}#${encodeURIComponent(s.remark)}`
             ).then(() => showToast('Скопировано'));
         });
         container.appendChild(div);
