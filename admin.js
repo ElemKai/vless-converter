@@ -117,10 +117,12 @@ function initAdmin() {
                 const target = `http://ip-api.com/json/${encodeURIComponent(ip)}?fields=status,message,country,regionName,city,isp,org,as,proxy,hosting,query`;
                 const resp = await fetch(`${proxyUrl}?url=${encodeURIComponent(target)}`);
                 const text = await resp.text();
+                if (!resp.ok) { ipResult.textContent = 'Ошибка прокси: ' + (resp.status === 502 ? 'сервер недоступен' : resp.status); return; }
                 let data;
-                try { data = JSON.parse(text); } catch { data = { status: 'fail', message: text }; }
+                try { data = JSON.parse(text); } catch { ipResult.textContent = 'Ошибка: невалидный ответ'; return; }
+                if (data.error) { ipResult.textContent = 'Ошибка: ' + data.error; return; }
                 if (data.body !== undefined) {
-                    try { data = JSON.parse(data.body); } catch { data = { status: 'fail', message: data.body }; }
+                    try { data = JSON.parse(data.body); } catch { ipResult.textContent = 'Ошибка: ' + data.body; return; }
                 }
                 ipResult.textContent = JSON.stringify(data, null, 2);
             } catch (e) {
