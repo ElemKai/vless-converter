@@ -17,10 +17,37 @@ function parseVless(link) {
 }
 
 function parseSubscription(text) {
-    const links = text.split(/[\r\n]+/).filter(l => l.trim());
     const servers = [];
+    // Try base64-decode the entire body first
+    let body = text;
+    try { body = atob(text.replace(/\s/g, '')); } catch {}
+    // Try Clash YAML proxy parsing
+    const yamlProxies = body.match(/^\s*-\s*name:\s*"([^"]+)"\s*\n\s*type:\s*vless\s*\n\s*server:\s*(\S+)\s*\n\s*port:\s*(\d+)\s*\n\s*uuid:\s*(\S+)/gm);
+    if (yamlProxies) {
+        for (const block of yamlProxies) {
+            const nameMatch = block.match(/name:\s*"([^"]+)"/);
+            const serverMatch = block.match(/server:\s*(\S+)/);
+            const portMatch = block.match(/port:\s*(\d+)/);
+            const uuidMatch = block.match(/uuid:\s*(\S+)/);
+            const netMatch = block.match(/network:\s*(\S+)/);
+            const tlsMatch = block.match(/tls:\s*(true|false)/);
+            const sniMatch = block.match(/servername:\s*(\S+)/);
+            if (serverMatch && portMatch && uuidMatch && serverMatch[1] !== '0.0.0.0') {
+                servers.push({
+                    id: uuidMatch[1], addr: serverMatch[1], port: portMatch[1],
+                    type: netMatch ? netMatch[1] : 'tcp',
+                    security: tlsMatch && tlsMatch[1] === 'true' ? 'tls' : 'none',
+                    encryption: 'none', flow: '', sni: sniMatch ? sniMatch[1] : '',
+                    fp: '', pbk: '', sid: '',
+                    remark: nameMatch ? nameMatch[1] : '',
+                });
+            }
+        }
+        if (servers.length > 0) return servers;
+    }
+    // Line-by-line parsing
+    const links = body.split(/[\r\n]+/).filter(l => l.trim());
     for (const raw of links) {
-        // try base64 decode
         let decoded = raw.trim();
         try {
             const b64 = atob(decoded);
