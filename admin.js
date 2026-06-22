@@ -51,7 +51,6 @@ function initAdmin() {
         const canvas = document.getElementById('speed-canvas');
         const pingEl = document.getElementById('speed-ping');
         const dlEl = document.getElementById('speed-dl');
-        const ulEl = document.getElementById('speed-ul');
         const ipEl = document.getElementById('speed-ip');
 
         function drawGauge(ctx, w, h, cx, cy, r, fraction, label, sublabel) {
@@ -103,23 +102,11 @@ function initAdmin() {
             } catch {}
         }
 
-        async function uploadWithProgress(url, data) {
-            return new Promise((resolve, reject) => {
-                const xhr = new XMLHttpRequest();
-                xhr.open('POST', url);
-                xhr.setRequestHeader('Content-Type', 'application/octet-stream');
-                xhr.onload = () => resolve(xhr.status);
-                xhr.onerror = reject;
-                xhr.send(data);
-            });
-        }
-
         speedBtn.addEventListener('click', async () => {
             speedBtn.disabled = true;
             speedBtn.textContent = '⏳ Тестирование...';
             pingEl.textContent = '...';
             dlEl.textContent = '...';
-            ulEl.textContent = '...';
             ipEl.textContent = '';
 
             const ctx = canvas.getContext('2d');
@@ -165,22 +152,6 @@ function initAdmin() {
                 dlEl.textContent = dlMbps.toFixed(1) + ' Mbps';
                 drawGauge(ctx, w, h, cx, cy, r, Math.min(dlMbps / MAX_MBPS, 1), Math.round(dlMbps), 'Мбит/с ↓');
             } catch { dlEl.textContent = 'ERR'; }
-
-            // 3. Upload (5MB)
-            try {
-                drawGauge(ctx, w, h, cx, cy, r, 0, '...', 'Отдача');
-                const ulSize = 5 * 1024 * 1024;
-                const ulBuf = new ArrayBuffer(ulSize);
-                for (let i = 0; i < ulSize; i += 65536) {
-                    crypto.getRandomValues(new Uint8Array(ulBuf, i, Math.min(65536, ulSize - i)));
-                }
-                const ulStart = performance.now();
-                await uploadWithProgress('https://speed.cloudflare.com/__up', ulBuf);
-                const ulElapsed = (performance.now() - ulStart) / 1000;
-                const ulMbps = (ulSize * 8) / ulElapsed / 1e6;
-                ulEl.textContent = ulMbps.toFixed(1) + ' Mbps';
-                drawGauge(ctx, w, h, cx, cy, r, Math.min(ulMbps / MAX_MBPS, 1), Math.round(ulMbps), 'Мбит/с ↑');
-            } catch { ulEl.textContent = 'ERR'; }
 
             lookupIP();
 
